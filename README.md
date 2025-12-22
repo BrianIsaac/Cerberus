@@ -21,14 +21,14 @@ A bounded, incident-ready ops assistant that converts Datadog telemetry into act
                                  │                       │
                                  ▼                       ▼
                         ┌─────────────────┐     ┌─────────────────┐
-                        │  Gemini 1.5     │     │  Datadog APIs   │
+                        │  Gemini 2.0     │     │  Datadog APIs   │
                         │  (Vertex AI)    │     │                 │
                         └─────────────────┘     └─────────────────┘
 ```
 
 ## Tech Stack
 
-- **LLM**: Google Gemini 1.5 Flash via Vertex AI
+- **LLM**: Google Gemini 2.0 Flash via Vertex AI
 - **Agent Framework**: LangGraph for structured workflows
 - **Tool Interface**: Model Context Protocol (MCP) via FastMCP
 - **Observability**: Datadog LLM Observability, APM, Logs, Custom Metrics
@@ -142,7 +142,7 @@ All requests emit:
 - [x] Phase 1: Project structure and core infrastructure
 - [x] Phase 2: Datadog observability setup
 - [x] Phase 3: MCP server with Datadog tools (10 tools, auto-instrumented)
-- [ ] Phase 4: LangGraph agent workflow
+- [x] Phase 4: LangGraph agent workflow (verified in Datadog LLM Obs)
 - [ ] Phase 5: RAGAS quality evaluation and production hardening
 
 ## License

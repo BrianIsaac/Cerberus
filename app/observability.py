@@ -131,6 +131,16 @@ def emit_invalid_output(reason: str):
     statsd.increment("agent.invalid_output", tags=tags)
 
 
+def emit_escalation(reason: str):
+    """Emit metric when workflow is escalated to human.
+
+    Args:
+        reason: Reason for escalation (e.g., low_confidence, budget_exceeded, security_violation)
+    """
+    tags = [f"reason:{reason}"]
+    statsd.increment("agent.escalation", tags=tags)
+
+
 # Domain-specific event logging functions
 
 def log_domain_event(

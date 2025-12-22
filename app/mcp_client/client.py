@@ -1,5 +1,6 @@
 """MCP client wrapper for invoking Datadog tools."""
 
+import json
 from typing import Any
 
 import structlog
@@ -8,6 +9,27 @@ from fastmcp import Client
 from app.config import settings
 
 logger = structlog.get_logger()
+
+
+def _extract_result(result: Any) -> dict[str, Any]:
+    """Extract dictionary from CallToolResult.
+
+    Args:
+        result: The CallToolResult from MCP call_tool.
+
+    Returns:
+        Dictionary extracted from the result content.
+    """
+    if hasattr(result, "content") and result.content:
+        for item in result.content:
+            if hasattr(item, "text"):
+                try:
+                    return json.loads(item.text)
+                except json.JSONDecodeError:
+                    return {"raw_text": item.text}
+    if isinstance(result, dict):
+        return result
+    return {"error": "Could not extract result", "raw": str(result)}
 
 
 class DatadogMCPClient:
@@ -57,10 +79,11 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing metric data, time range, and dashboard link.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "get_metrics",
             {"service": service, "time_window": time_window, "metrics": metrics},
         )
+        return _extract_result(result)
 
     async def get_logs(
         self,
@@ -80,10 +103,11 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing log entries, summary, and logs explorer link.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "get_logs",
             {"service": service, "query": query, "time_window": time_window, "limit": limit},
         )
+        return _extract_result(result)
 
     async def list_spans(
         self,
@@ -103,10 +127,11 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing span data, summary, and traces explorer link.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "list_spans",
             {"service": service, "query": query, "time_window": time_window, "limit": limit},
         )
+        return _extract_result(result)
 
     async def get_trace(self, trace_id: str) -> dict[str, Any]:
         """Fetch a single trace by ID from Datadog via MCP.
@@ -117,10 +142,11 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing trace details including all spans.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "get_trace",
             {"trace_id": trace_id},
         )
+        return _extract_result(result)
 
     async def create_incident(
         self,
@@ -144,7 +170,7 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing incident ID, link, and creation timestamp.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "create_incident",
             {
                 "title": title,
@@ -155,6 +181,7 @@ class DatadogMCPClient:
                 "next_steps": next_steps,
             },
         )
+        return _extract_result(result)
 
     async def create_case(
         self,
@@ -178,7 +205,7 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing case ID, key, link, and creation timestamp.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "create_case",
             {
                 "title": title,
@@ -189,6 +216,7 @@ class DatadogMCPClient:
                 "next_steps": next_steps,
             },
         )
+        return _extract_result(result)
 
     async def list_incidents(
         self,
@@ -204,10 +232,11 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing list of incidents and summary.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "list_incidents",
             {"status": status, "limit": limit},
         )
+        return _extract_result(result)
 
     async def get_incident(self, incident_id: str) -> dict[str, Any]:
         """Get incident details via MCP.
@@ -218,10 +247,11 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing full incident details.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "get_incident",
             {"incident_id": incident_id},
         )
+        return _extract_result(result)
 
     async def list_monitors(
         self,
@@ -239,10 +269,11 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing list of monitors and summary by state.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "list_monitors",
             {"state": state, "tags": tags, "limit": limit},
         )
+        return _extract_result(result)
 
     async def list_dashboards(
         self,
@@ -258,7 +289,8 @@ class DatadogMCPClient:
         Returns:
             Dictionary containing list of dashboards.
         """
-        return await self._client.call_tool(
+        result = await self._client.call_tool(
             "list_dashboards",
             {"query": query, "limit": limit},
         )
+        return _extract_result(result)
