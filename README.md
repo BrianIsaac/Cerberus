@@ -99,10 +99,19 @@ ops-assistant/
 │   ├── config.py            # Settings management
 │   ├── logging_config.py    # Structured logging with Datadog correlation
 │   ├── observability.py     # LLM Obs and custom metrics
+│   ├── mcp_client/
+│   │   └── client.py        # MCP client wrapper
 │   └── models/
 │       └── schemas.py       # Pydantic request/response models
-├── mcp_server/              # MCP server for Datadog tools
-├── infra/                   # Infrastructure configuration
+├── mcp_server/
+│   ├── server.py            # FastMCP server entry point
+│   └── tools/               # Datadog API tools
+│       ├── metrics.py       # get_metrics
+│       ├── logs.py          # get_logs
+│       ├── traces.py        # list_spans, get_trace
+│       ├── incidents.py     # create_incident, create_case, list/get
+│       ├── monitors.py      # list_monitors
+│       └── dashboards.py    # list_dashboards
 ├── scripts/                 # Utility scripts
 ├── tests/                   # Test suite
 ├── Dockerfile               # Multi-stage build for Cloud Run
@@ -132,7 +141,7 @@ All requests emit:
 
 - [x] Phase 1: Project structure and core infrastructure
 - [x] Phase 2: Datadog observability setup
-- [ ] Phase 3: MCP server with Datadog tools
+- [x] Phase 3: MCP server with Datadog tools (10 tools, auto-instrumented)
 - [ ] Phase 4: LangGraph agent workflow
 - [ ] Phase 5: RAGAS quality evaluation and production hardening
 
