@@ -82,19 +82,24 @@ steps:
           --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest"
 
   # Create GitHub deployment
-  - name: 'gcr.io/cloud-builders/curl'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: bash
     args:
       - '-c'
       - |
+        apt-get update && apt-get install -y jq
+
         SERVICE_URL=$(gcloud run services describe ${_SERVICE_NAME} --region=${_REGION} --format='value(status.url)')
 
-        DEPLOY_ID=$(curl -s -X POST \
+        DEPLOY_RESPONSE=$(curl -s -X POST \
           -H "Authorization: token $$GITHUB_TOKEN" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${REPO_FULL_NAME}/deployments \
-          -d '{"ref":"'$COMMIT_SHA'","environment":"production","auto_merge":false,"required_contexts":[]}' \
-          | grep '"id":' | head -1 | sed 's/[^0-9]//g')
+          -d '{"ref":"'$COMMIT_SHA'","environment":"production","auto_merge":false,"required_contexts":[]}')
+
+        echo "Deploy response: $$DEPLOY_RESPONSE"
+        DEPLOY_ID=$(echo "$$DEPLOY_RESPONSE" | jq -r '.id')
+        echo "Deploy ID: $$DEPLOY_ID"
 
         curl -s -X POST \
           -H "Authorization: token $$GITHUB_TOKEN" \
