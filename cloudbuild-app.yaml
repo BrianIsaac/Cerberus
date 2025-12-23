@@ -81,6 +81,33 @@ steps:
           --set-secrets="DD_APP_KEY=DD_APP_KEY:latest" \
           --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest"
 
+  # Create GitHub deployment
+  - name: 'gcr.io/cloud-builders/curl'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        SERVICE_URL=$(gcloud run services describe ${_SERVICE_NAME} --region=${_REGION} --format='value(status.url)')
+
+        DEPLOY_ID=$(curl -s -X POST \
+          -H "Authorization: token $$GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${REPO_FULL_NAME}/deployments \
+          -d '{"ref":"'$COMMIT_SHA'","environment":"production","auto_merge":false,"required_contexts":[]}' \
+          | grep '"id":' | head -1 | sed 's/[^0-9]//g')
+
+        curl -s -X POST \
+          -H "Authorization: token $$GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${REPO_FULL_NAME}/deployments/$${DEPLOY_ID}/statuses \
+          -d '{"state":"success","environment_url":"'$${SERVICE_URL}'","description":"Deployed to Cloud Run"}'
+    secretEnv: ['GITHUB_TOKEN']
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/GITHUB_TOKEN/versions/latest
+      env: 'GITHUB_TOKEN'
+
 images:
   - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
   - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
