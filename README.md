@@ -10,6 +10,8 @@ A bounded, incident-ready ops assistant that converts Datadog telemetry into act
 - Human approval required before creating incidents/cases
 - Bounded autonomy with step budgets and tool limits
 - Full observability via Datadog APM, LLM Observability, and custom metrics
+- Security hardening: prompt injection detection, PII detection and redaction
+- Quality evaluation: RAGAS integration (faithfulness, answer relevancy)
 
 ## Architecture
 
@@ -99,6 +101,13 @@ ops-assistant/
 │   ├── config.py            # Settings management
 │   ├── logging_config.py    # Structured logging with Datadog correlation
 │   ├── observability.py     # LLM Obs and custom metrics
+│   ├── security.py          # Prompt injection and PII detection
+│   ├── evaluation.py        # Custom quality evaluation submission
+│   ├── agent/
+│   │   ├── state.py         # LangGraph state schema
+│   │   ├── nodes.py         # Workflow nodes (intake, collect, synthesis)
+│   │   └── workflow.py      # LangGraph workflow graph
+│   ├── prompts/             # LLM prompt templates
 │   ├── mcp_client/
 │   │   └── client.py        # MCP client wrapper
 │   └── models/
@@ -143,8 +152,9 @@ All requests emit:
 - [x] Phase 2: Datadog observability setup
 - [x] Phase 3: MCP server with Datadog tools (10 tools, auto-instrumented)
 - [x] Phase 4: LangGraph agent workflow (verified in Datadog LLM Obs)
-- [ ] Phase 5: RAGAS quality evaluation and production hardening
+- [x] Phase 5: Security hardening and quality evaluation (prompt injection, PII, RAGAS)
+- [ ] Phase 6: Traffic generator and demo preparation
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+Apache License 2.0. See [LICENSE](LICENSE) for details.

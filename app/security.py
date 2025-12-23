@@ -1,9 +1,19 @@
-"""Security validation for ops assistant input processing."""
+"""Security validation for ops assistant input processing.
+
+This module provides security validation functions including:
+- Prompt injection detection
+- PII detection and redaction
+- Input validation
+
+Security metrics are emitted to Datadog for monitoring.
+"""
 
 import re
 from typing import Tuple
 
 import structlog
+
+from app.observability import emit_quality_metric
 
 logger = structlog.get_logger()
 
@@ -57,6 +67,7 @@ def check_prompt_injection(text: str) -> Tuple[bool, str | None]:
                 pattern=pattern,
                 input_preview=text[:100],
             )
+            emit_quality_metric("prompt_injection_detected", 1.0)
             return False, pattern
 
     return True, None
@@ -81,6 +92,9 @@ def check_pii(text: str) -> Tuple[bool, list[str]]:
                 pii_type=pii_type,
                 input_preview=text[:50] + "...",
             )
+
+    if detected:
+        emit_quality_metric("pii_detected", float(len(detected)))
 
     return len(detected) == 0, detected
 
@@ -147,3 +161,52 @@ def sanitise_for_logging(text: str, max_length: int = 200) -> str:
     text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", text)
 
     return text
+
+
+def check_pii_in_output(text: str) -> Tuple[bool, list[str]]:
+    """Check output text for PII patterns.
+
+    This is used to validate LLM outputs before returning to users.
+    Note: Datadog Sensitive Data Scanner provides comprehensive PII
+    detection on the backend as an additional layer.
+
+    Args:
+        text: Output text to check
+
+    Returns:
+        Tuple of (is_clean, detected_pii_types). If clean, list is empty.
+    """
+    detected = []
+
+    for pattern, pii_type in PII_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            detected.append(pii_type)
+
+    if detected:
+        logger.warning(
+            "pii_detected_in_output",
+            pii_types=detected,
+        )
+        emit_quality_metric("pii_in_output", float(len(detected)))
+
+    return len(detected) == 0, detected
+
+
+def redact_pii(text: str) -> str:
+    """Redact detected PII from text.
+
+    Replaces PII patterns with type-specific redaction markers.
+
+    Args:
+        text: Text containing potential PII
+
+    Returns:
+        Text with PII redacted
+    """
+    redacted = text
+
+    for pattern, pii_type in PII_PATTERNS:
+        replacement = f"[{pii_type.upper()}_REDACTED]"
+        redacted = re.sub(pattern, replacement, redacted, flags=re.IGNORECASE)
+
+    return redacted
