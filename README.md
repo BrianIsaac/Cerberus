@@ -69,8 +69,8 @@ cp .env.example .env
 ### Running Locally
 
 ```bash
-# Start Datadog agent (for local development)
-docker run -d --name dd-agent \
+# 1. Start Datadog agent (for metrics/traces)
+sudo docker run -d --name dd-agent \
   --network host \
   -e DD_API_KEY=your-api-key \
   -e DD_SITE=datadoghq.com \
@@ -78,9 +78,19 @@ docker run -d --name dd-agent \
   -e DD_APM_ENABLED=true \
   datadog/agent:latest
 
-# Run the application
-export DD_SERVICE=ops-assistant DD_ENV=development DD_VERSION=0.1.0
-uv run ddtrace-run uvicorn app.main:app --host 0.0.0.0 --port 8080
+# 2. Start MCP server (terminal 1)
+uv run python mcp_server/server.py
+
+# 3. Start main app with tracing (terminal 2)
+uv run ddtrace-run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 4. Test the endpoint
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Why is api-gateway slow?", "service": "api-gateway"}'
+
+# Stop agent when done
+sudo docker stop dd-agent && sudo docker rm dd-agent
 ```
 
 ### API Endpoints
@@ -121,11 +131,39 @@ ops-assistant/
 │       ├── incidents.py     # create_incident, create_case, list/get
 │       ├── monitors.py      # list_monitors
 │       └── dashboards.py    # list_dashboards
-├── scripts/                 # Utility scripts
+├── scripts/
+│   └── traffic_gen.py       # Traffic generator for demo/testing
 ├── tests/                   # Test suite
 ├── Dockerfile               # Multi-stage build for Cloud Run
 └── pyproject.toml           # Project dependencies
 ```
+
+## Traffic Generator
+
+Generate test traffic to verify observability and trigger monitors:
+
+```bash
+# Normal triage questions
+uv run python scripts/traffic_gen.py --mode normal --rps 0.5 --duration 60
+
+# Trigger latency alerts
+uv run python scripts/traffic_gen.py --mode latency --rps 1.0 --duration 30
+
+# Test quality monitoring (fictional services)
+uv run python scripts/traffic_gen.py --mode hallucination --rps 0.5 --duration 30
+```
+
+**Available Modes:**
+| Mode | Purpose |
+|------|---------|
+| `normal` | Standard triage questions |
+| `latency` | Long prompts for latency testing |
+| `hallucination` | Fictional services for quality monitoring |
+| `pii_test` | PII detection testing |
+| `low_confidence` | Trigger clarification/escalation |
+| `runaway` | Vague prompts (missing identifiers) |
+| `tool_error` | Non-existent services |
+| `mcp_health` | Invalid MCP tool calls |
 
 ## Governance Controls
 
@@ -153,7 +191,8 @@ All requests emit:
 - [x] Phase 3: MCP server with Datadog tools (10 tools, auto-instrumented)
 - [x] Phase 4: LangGraph agent workflow (verified in Datadog LLM Obs)
 - [x] Phase 5: Security hardening and quality evaluation (prompt injection, PII, RAGAS)
-- [ ] Phase 6: Traffic generator and demo preparation
+- [x] Phase 6: Traffic generator and demo preparation (8 modes, APM + LLM Obs verified)
+- [ ] Phase 7: Cloud Run deployment and Datadog dashboards/monitors
 
 ## License
 
