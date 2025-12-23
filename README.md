@@ -134,13 +134,14 @@ ops-assistant/
 ├── scripts/
 │   └── traffic_gen.py       # Traffic generator for demo/testing
 ├── infra/
-│   ├── cloudrun/            # Cloud Run deployment scripts
+│   ├── cloudrun/            # Cloud Run deployment configs
+│   │   ├── service-with-sidecar.yaml # Cloud Run + Datadog Agent sidecar
 │   │   ├── setup_secrets.sh      # Secret Manager setup
 │   │   ├── deploy_mcp_server.sh  # Deploy MCP server
 │   │   ├── configure_iam.sh      # Service-to-service IAM
 │   │   └── deploy.sh             # Deploy main app
 │   └── datadog/             # Datadog configuration
-│       ├── dashboard.json   # Dashboard with 6 widget groups
+│       ├── dashboard.json   # Dashboard with 5 widget groups
 │       ├── monitors.json    # 8 monitors with incident automation
 │       ├── slos.json        # 4 SLOs (availability, latency, governance, quality)
 │       └── apply_config.sh  # Deploy script (auto-loads .env)
@@ -205,12 +206,11 @@ cd infra/datadog
 ./apply_config.sh  # Reads DD_API_KEY and DD_APP_KEY from .env
 ```
 
-**Dashboard** (6 widget groups):
-- Application Health: request volume, P95 latency, error rate, LLM latency
-- Governance & Autonomy: steps distribution, budget exceeded %, model calls
-- MCP Tools Performance: invocation rate, latency P95, error heatmap
-- Quality Evaluations: hallucination rate, RAGAS faithfulness, toxicity, PII
-- Outcome & Human Verification: approval rate, review outcomes, handoffs
+**Dashboard** (5 widget groups):
+- Application Health: request volume, P95 latency, error rate, Gemini LLM latency
+- Governance & Autonomy: Gemini LLM calls, LangGraph workflow calls, latency, errors
+- MCP Tools Performance: tool invocations, latency (avg/P95), error rate, Apdex score
+- Quality Evaluations: RAGAS faithfulness/relevancy scores, evaluation calls, confidence scores
 - Operations: monitor status panel, incidents/cases, worst traces
 
 **Monitors** (8 total):
@@ -266,9 +266,64 @@ The project includes Cloud Build configs for automated deployments.
 # Deploy MCP server
 gcloud builds submit --config cloudbuild-mcp.yaml
 
-# Deploy main app
+# Deploy main app (via Cloud Build)
 gcloud builds submit --config cloudbuild-app.yaml
+
+# Deploy main app with Datadog sidecar (recommended)
+gcloud run services replace infra/cloudrun/service-with-sidecar.yaml --region us-central1
 ```
+
+## Hackathon Submission
+
+**AI Partner Catalyst: Accelerate Innovation** - Datadog LLM Observability Challenge
+
+### Hosted Application
+- **URL**: https://ops-assistant-118887195862.us-central1.run.app
+
+### Datadog Organisation
+- **Organisation Name**: AI Singapore
+- **Region**: ap1 (Asia-Pacific)
+
+### Key Datadog Resources
+- **LLM Obs Traces** (Primary): https://ap1.datadoghq.com/llm/traces?query=%40ml_app%3Aops-assistant
+- **Dashboard**: https://ap1.datadoghq.com/dashboard/k3b-pcm-45c
+- **Monitors**: https://ap1.datadoghq.com/monitors/manage?q=service%3Aops-assistant
+
+### Cloud Run Observability with Datadog Agent Sidecar
+This application runs on Google Cloud Run Gen2 with a Datadog Agent sidecar container. This enables full observability:
+- **APM Traces**: Fully functional via `gcr.io/datadoghq/serverless-init:latest` sidecar
+- **LLM Observability**: Fully functional with traces, spans, and evaluations
+- **DogStatsD Metrics**: Custom metrics via the sidecar agent
+- **Dashboard**: All sections populated with real-time data
+
+The sidecar configuration is defined in `infra/cloudrun/service-with-sidecar.yaml`.
+
+### Submission Artifacts
+All Datadog JSON exports are in the `submission/` directory:
+- `submission/dashboard.json` - Dashboard configuration
+- `submission/monitors.json` - 8 monitors with incident automation
+- `submission/slos.json` - 4 SLOs (availability, latency, governance, quality)
+- `submission/screenshots/` - Evidence screenshots
+
+### Detection Rules (Monitors)
+| Monitor | Threshold | Severity |
+|---------|-----------|----------|
+| High P95 Latency | >10s | P3 |
+| Agent Step Budget Exceeded | >0 | P3 |
+| Tool Error Rate Spike | >10% | P2 |
+| Quality Degradation | faithfulness <0.7 | P2 |
+| Hallucination Rate High | >10% | P1 |
+| PII Detection Alert | any PII detected | P1 |
+| MCP Server Connection Issues | >5 errors | P1 |
+| Token Budget Spike | >50k tokens | P3 |
+
+### Observability Strategy
+This application demonstrates comprehensive LLM observability:
+1. **Trace Visibility**: Full LLM workflow traces with span hierarchy (workflow → agent → tool)
+2. **Quality Evaluation**: RAGAS faithfulness and answer relevancy scores
+3. **Security Monitoring**: PII detection, prompt injection detection
+4. **Governance**: Step budgets, tool limits, confidence thresholds
+5. **Incident Automation**: Workflow triggers incidents on monitor alerts
 
 ## License
 
