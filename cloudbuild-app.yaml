@@ -1,0 +1,89 @@
+# Cloud Build config for main Ops Assistant app
+# Trigger: Push to main with changes in app/** or Dockerfile-app
+#
+# Required substitutions (set in trigger or via --substitutions):
+#   _REGION: Cloud Run region (default: us-central1)
+#   _DD_SITE: Datadog site (default: ap1.datadoghq.com)
+#
+# Prerequisites:
+#   - MCP server must be deployed first
+#   - Secrets must exist in Secret Manager: DD_API_KEY, DD_APP_KEY, OPENAI_API_KEY
+
+substitutions:
+  _REGION: us-central1
+  _DD_SITE: ap1.datadoghq.com
+  _SERVICE_NAME: ops-assistant
+  _MCP_SERVICE_NAME: datadog-mcp-server
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+      - '-f'
+      - 'Dockerfile-app'
+      - '.'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  # Push the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+
+  # Get MCP server URL and deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        MCP_URL=$(gcloud run services describe ${_MCP_SERVICE_NAME} \
+          --region=${_REGION} \
+          --format='value(status.url)')
+
+        gcloud run deploy ${_SERVICE_NAME} \
+          --image=gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA \
+          --region=${_REGION} \
+          --platform=managed \
+          --allow-unauthenticated \
+          --memory=1Gi \
+          --cpu=1 \
+          --timeout=300 \
+          --concurrency=20 \
+          --max-instances=5 \
+          --min-instances=0 \
+          --set-env-vars="DD_SERVICE=${_SERVICE_NAME}" \
+          --set-env-vars="DD_ENV=production" \
+          --set-env-vars="DD_VERSION=$COMMIT_SHA" \
+          --set-env-vars="DD_LLMOBS_ENABLED=1" \
+          --set-env-vars="DD_LLMOBS_ML_APP=${_SERVICE_NAME}" \
+          --set-env-vars="DD_LLMOBS_AGENTLESS_ENABLED=1" \
+          --set-env-vars="DD_SITE=${_DD_SITE}" \
+          --set-env-vars="DD_LLMOBS_EVALUATORS=ragas_faithfulness" \
+          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
+          --set-env-vars="VERTEX_LOCATION=${_REGION}" \
+          --set-env-vars="GEMINI_MODEL=gemini-2.0-flash" \
+          --set-env-vars="MCP_SERVER_URL=$${MCP_URL}/mcp" \
+          --set-env-vars="AGENT_MAX_STEPS=8" \
+          --set-env-vars="AGENT_MAX_MODEL_CALLS=5" \
+          --set-env-vars="AGENT_MAX_TOOL_CALLS=6" \
+          --set-secrets="DD_API_KEY=DD_API_KEY:latest" \
+          --set-secrets="DD_APP_KEY=DD_APP_KEY:latest" \
+          --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest"
+
+images:
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

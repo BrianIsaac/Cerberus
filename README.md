@@ -134,13 +134,19 @@ ops-assistant/
 ├── scripts/
 │   └── traffic_gen.py       # Traffic generator for demo/testing
 ├── infra/
+│   ├── cloudrun/            # Cloud Run deployment scripts
+│   │   ├── setup_secrets.sh      # Secret Manager setup
+│   │   ├── deploy_mcp_server.sh  # Deploy MCP server
+│   │   ├── configure_iam.sh      # Service-to-service IAM
+│   │   └── deploy.sh             # Deploy main app
 │   └── datadog/             # Datadog configuration
 │       ├── dashboard.json   # Dashboard with 6 widget groups
 │       ├── monitors.json    # 8 monitors with incident automation
 │       ├── slos.json        # 4 SLOs (availability, latency, governance, quality)
 │       └── apply_config.sh  # Deploy script (auto-loads .env)
 ├── tests/                   # Test suite
-├── Dockerfile               # Multi-stage build for Cloud Run
+├── Dockerfile-app           # Multi-stage build for main app (Cloud Run)
+├── Dockerfile-mcp           # Multi-stage build for MCP server (Cloud Run)
 └── pyproject.toml           # Project dependencies
 ```
 
@@ -232,7 +238,37 @@ cd infra/datadog
 - [x] Phase 5: Security hardening and quality evaluation (prompt injection, PII, RAGAS)
 - [x] Phase 6: Traffic generator and demo preparation (8 modes, APM + LLM Obs verified)
 - [x] Phase 7: Datadog configuration (dashboard, 8 monitors, 4 SLOs deployed)
-- [ ] Phase 8: Cloud Run deployment (MCP server, main app, service-to-service auth)
+- [x] Phase 8: Cloud Run deployment (MCP server, main app, service-to-service auth)
+
+## CI/CD with Cloud Build
+
+The project includes Cloud Build configs for automated deployments.
+
+### Setup Triggers
+
+1. **Connect your repository** in Cloud Console > Cloud Build > Triggers > Connect Repository
+
+2. **Create MCP Server trigger:**
+   - Name: `deploy-mcp-server`
+   - Event: Push to branch `^main$`
+   - Included files: `mcp_server/**`, `Dockerfile-mcp`, `cloudbuild-mcp.yaml`, `pyproject.toml`, `uv.lock`
+   - Config: `cloudbuild-mcp.yaml`
+
+3. **Create Main App trigger:**
+   - Name: `deploy-ops-assistant`
+   - Event: Push to branch `^main$`
+   - Included files: `app/**`, `Dockerfile-app`, `cloudbuild-app.yaml`, `pyproject.toml`, `uv.lock`
+   - Config: `cloudbuild-app.yaml`
+
+### Manual Deployment
+
+```bash
+# Deploy MCP server
+gcloud builds submit --config cloudbuild-mcp.yaml
+
+# Deploy main app
+gcloud builds submit --config cloudbuild-app.yaml
+```
 
 ## License
 

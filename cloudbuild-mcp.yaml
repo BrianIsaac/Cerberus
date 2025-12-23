@@ -1,0 +1,64 @@
+# Cloud Build config for MCP server
+# Trigger: Push to main with changes in mcp_server/** or Dockerfile-mcp
+#
+# Required substitutions (set in trigger or via --substitutions):
+#   _REGION: Cloud Run region (default: us-central1)
+#   _DD_SITE: Datadog site (default: ap1.datadoghq.com)
+
+substitutions:
+  _REGION: us-central1
+  _DD_SITE: ap1.datadoghq.com
+  _SERVICE_NAME: datadog-mcp-server
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+      - '-f'
+      - 'Dockerfile-mcp'
+      - '.'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  # Push the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image=gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--timeout=60'
+      - '--concurrency=50'
+      - '--max-instances=5'
+      - '--min-instances=1'
+      - '--set-env-vars=DD_SITE=${_DD_SITE}'
+      - '--set-secrets=DD_API_KEY=DD_API_KEY:latest,DD_APP_KEY=DD_APP_KEY:latest'
+
+images:
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

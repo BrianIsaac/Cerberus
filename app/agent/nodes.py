@@ -44,7 +44,7 @@ logger = structlog.get_logger()
 try:
     from datasets import Dataset
     from ragas import evaluate as ragas_evaluate
-    from ragas.metrics import answer_relevancy, context_precision, faithfulness
+    from ragas.metrics import answer_relevancy, faithfulness
 
     RAGAS_AVAILABLE = True
 except ImportError:
@@ -507,23 +507,20 @@ Traces: {traces_str[:1000]}"""
 
                 ragas_results = ragas_evaluate(
                     dataset,
-                    metrics=[faithfulness, answer_relevancy, context_precision],
+                    metrics=[faithfulness, answer_relevancy],
                 )
 
                 faithfulness_score = ragas_results.get("faithfulness", 0.0)
                 answer_relevancy_score = ragas_results.get("answer_relevancy", 0.0)
-                context_precision_score = ragas_results.get("context_precision", 0.0)
 
                 logger.info(
                     "ragas_evaluation_completed",
                     faithfulness=faithfulness_score,
                     answer_relevancy=answer_relevancy_score,
-                    context_precision=context_precision_score,
                 )
 
                 emit_quality_metric("ragas_faithfulness", faithfulness_score)
                 emit_quality_metric("ragas_answer_relevancy", answer_relevancy_score)
-                emit_quality_metric("ragas_context_precision", context_precision_score)
 
             except Exception as e:
                 logger.error("ragas_evaluation_failed", error=str(e))

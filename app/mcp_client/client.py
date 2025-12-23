@@ -3,12 +3,40 @@
 import json
 from typing import Any
 
+import httpx
 import structlog
 from fastmcp import Client
 
 from app.config import settings
 
 logger = structlog.get_logger()
+
+
+async def _get_identity_token(audience: str) -> str | None:
+    """Fetch identity token from GCP metadata server for service-to-service auth.
+
+    Args:
+        audience: The target audience URL (the MCP server URL).
+
+    Returns:
+        Identity token string if on GCP, None otherwise.
+    """
+    metadata_url = (
+        f"http://metadata.google.internal/computeMetadata/v1/"
+        f"instance/service-accounts/default/identity?audience={audience}"
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                metadata_url,
+                headers={"Metadata-Flavor": "Google"},
+                timeout=5.0,
+            )
+            if response.status_code == 200:
+                return response.text
+    except httpx.RequestError:
+        pass
+    return None
 
 
 def _extract_result(result: Any) -> dict[str, Any]:
@@ -46,9 +74,17 @@ class DatadogMCPClient:
         Returns:
             DatadogMCPClient: The connected client instance.
         """
-        self._client = Client(self.server_url)
+        base_url = self.server_url.rsplit("/mcp", 1)[0]
+        id_token = await _get_identity_token(base_url)
+
+        if id_token:
+            self._client = Client(self.server_url, auth=id_token)
+            logger.info("mcp_client_connected_with_auth", server_url=self.server_url)
+        else:
+            self._client = Client(self.server_url)
+            logger.info("mcp_client_connected", server_url=self.server_url)
+
         await self._client.__aenter__()
-        logger.info("mcp_client_connected", server_url=self.server_url)
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
