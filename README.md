@@ -133,6 +133,12 @@ ops-assistant/
 │       └── dashboards.py    # list_dashboards
 ├── scripts/
 │   └── traffic_gen.py       # Traffic generator for demo/testing
+├── infra/
+│   └── datadog/             # Datadog configuration
+│       ├── dashboard.json   # Dashboard with 6 widget groups
+│       ├── monitors.json    # 8 monitors with incident automation
+│       ├── slos.json        # 4 SLOs (availability, latency, governance, quality)
+│       └── apply_config.sh  # Deploy script (auto-loads .env)
 ├── tests/                   # Test suite
 ├── Dockerfile               # Multi-stage build for Cloud Run
 └── pyproject.toml           # Project dependencies
@@ -184,6 +190,39 @@ All requests emit:
 - Custom metrics (step counts, tool calls, latency)
 - LLM Observability spans for Gemini calls
 
+### Datadog Configuration
+
+Deploy dashboard, monitors, and SLOs:
+
+```bash
+cd infra/datadog
+./apply_config.sh  # Reads DD_API_KEY and DD_APP_KEY from .env
+```
+
+**Dashboard** (6 widget groups):
+- Application Health: request volume, P95 latency, error rate, LLM latency
+- Governance & Autonomy: steps distribution, budget exceeded %, model calls
+- MCP Tools Performance: invocation rate, latency P95, error heatmap
+- Quality Evaluations: hallucination rate, RAGAS faithfulness, toxicity, PII
+- Outcome & Human Verification: approval rate, review outcomes, handoffs
+- Operations: monitor status panel, incidents/cases, worst traces
+
+**Monitors** (8 total):
+- High P95 Latency (>10s)
+- Agent Step Budget Exceeded
+- Tool Error Rate Spike (>10%)
+- Quality Degradation (faithfulness <0.7)
+- Hallucination Rate High (>10%)
+- PII Detection Alert
+- MCP Server Connection Issues
+- Token Budget Spike
+
+**SLOs** (4 total):
+- Availability: 99.9% (30d), 99.5% (7d)
+- Latency: 95% <10s (30d), 90% (7d)
+- Governance: 99% within budgets (30d)
+- Quality: 99.5% hallucination-free (30d)
+
 ## Development Status
 
 - [x] Phase 1: Project structure and core infrastructure
@@ -192,7 +231,8 @@ All requests emit:
 - [x] Phase 4: LangGraph agent workflow (verified in Datadog LLM Obs)
 - [x] Phase 5: Security hardening and quality evaluation (prompt injection, PII, RAGAS)
 - [x] Phase 6: Traffic generator and demo preparation (8 modes, APM + LLM Obs verified)
-- [ ] Phase 7: Cloud Run deployment and Datadog dashboards/monitors
+- [x] Phase 7: Datadog configuration (dashboard, 8 monitors, 4 SLOs deployed)
+- [ ] Phase 8: Cloud Run deployment (MCP server, main app, service-to-service auth)
 
 ## License
 

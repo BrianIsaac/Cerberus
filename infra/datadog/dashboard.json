@@ -1,0 +1,516 @@
+{
+  "title": "Ops Assistant Health",
+  "description": "Comprehensive health dashboard for Ops Assistant with throughput, latency, errors, autonomy, quality, and outcome metrics",
+  "widgets": [
+    {
+      "id": 0,
+      "definition": {
+        "type": "group",
+        "title": "Application Health",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 1,
+            "definition": {
+              "type": "timeseries",
+              "title": "Request Volume",
+              "requests": [
+                {
+                  "q": "sum:trace.http.request.hits{service:ops-assistant}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "dog_classic"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 2,
+            "definition": {
+              "type": "timeseries",
+              "title": "P95 Request Latency",
+              "requests": [
+                {
+                  "q": "p95:trace.http.request.duration{service:ops-assistant}",
+                  "display_type": "line"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "y = 10",
+                  "display_type": "error dashed",
+                  "label": "SLO Threshold (10s)"
+                }
+              ]
+            }
+          },
+          {
+            "id": 3,
+            "definition": {
+              "type": "query_value",
+              "title": "Error Rate (%)",
+              "requests": [
+                {
+                  "q": "sum:trace.http.request.errors{service:ops-assistant}.as_count() / sum:trace.http.request.hits{service:ops-assistant}.as_count() * 100",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 1,
+                      "palette": "white_on_red"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 1,
+                      "palette": "white_on_green"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 4,
+            "definition": {
+              "type": "timeseries",
+              "title": "Gemini LLM Latency (P95)",
+              "requests": [
+                {
+                  "q": "p95:trace.llmobs.span.duration{span.kind:llm,service:ops-assistant}",
+                  "display_type": "line"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "definition": {
+        "type": "group",
+        "title": "Governance & Autonomy",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 11,
+            "definition": {
+              "type": "distribution",
+              "title": "Steps Distribution",
+              "requests": [
+                {
+                  "q": "avg:agent.steps{service:ops-assistant} by {request_type}"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "x = 8",
+                  "display_type": "error dashed",
+                  "label": "Step Budget Cap"
+                }
+              ]
+            }
+          },
+          {
+            "id": 12,
+            "definition": {
+              "type": "query_value",
+              "title": "% Requests Hitting Step Cap",
+              "requests": [
+                {
+                  "q": "sum:agent.step_budget_exceeded{service:ops-assistant}.as_count() / sum:trace.http.request.hits{service:ops-assistant}.as_count() * 100",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 5,
+                      "palette": "white_on_red"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 5,
+                      "palette": "white_on_yellow"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 1,
+                      "palette": "white_on_green"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 13,
+            "definition": {
+              "type": "timeseries",
+              "title": "Model Calls Distribution",
+              "requests": [
+                {
+                  "q": "avg:agent.model_calls{service:ops-assistant} by {request_type}",
+                  "display_type": "bars"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "y = 5",
+                  "display_type": "warning dashed",
+                  "label": "Model Call Budget"
+                }
+              ]
+            }
+          },
+          {
+            "id": 14,
+            "definition": {
+              "type": "timeseries",
+              "title": "Tool Error Rate by Tool",
+              "requests": [
+                {
+                  "q": "sum:agent.tool_error{service:ops-assistant} by {tool_name}.as_rate()",
+                  "display_type": "bars"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "definition": {
+        "type": "group",
+        "title": "MCP Tools Performance",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 21,
+            "definition": {
+              "type": "timeseries",
+              "title": "Tool Invocation Rate by Tool",
+              "requests": [
+                {
+                  "q": "sum:trace.llmobs.span.count{span.kind:tool,service:ops-assistant} by {mcp.tool.name}.as_rate()",
+                  "display_type": "bars"
+                }
+              ]
+            }
+          },
+          {
+            "id": 22,
+            "definition": {
+              "type": "timeseries",
+              "title": "Tool Latency P95 by Tool",
+              "requests": [
+                {
+                  "q": "p95:trace.llmobs.span.duration{span.kind:tool,service:ops-assistant} by {mcp.tool.name}",
+                  "display_type": "line"
+                }
+              ]
+            }
+          },
+          {
+            "id": 23,
+            "definition": {
+              "type": "heatmap",
+              "title": "Tool Error Rate Heatmap",
+              "requests": [
+                {
+                  "q": "sum:trace.llmobs.span.error{span.kind:tool,service:ops-assistant} by {mcp.tool.name}.as_rate()"
+                }
+              ]
+            }
+          },
+          {
+            "id": 24,
+            "definition": {
+              "type": "query_value",
+              "title": "MCP Server Health (%)",
+              "requests": [
+                {
+                  "q": "(sum:trace.llmobs.span.count{mcp.session.initialize,service:ops-assistant}.as_count() - sum:trace.llmobs.span.error{mcp.session.initialize,service:ops-assistant}.as_count()) / sum:trace.llmobs.span.count{mcp.session.initialize,service:ops-assistant}.as_count() * 100",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 95,
+                      "palette": "white_on_green"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 95,
+                      "palette": "white_on_yellow"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 80,
+                      "palette": "white_on_red"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "definition": {
+        "type": "group",
+        "title": "Quality Evaluations",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 31,
+            "definition": {
+              "type": "timeseries",
+              "title": "Hallucination Rate Over Time",
+              "requests": [
+                {
+                  "q": "sum:llmobs.evaluation.hallucination.fail{service:ops-assistant}.as_count() / sum:llmobs.evaluation.hallucination.total{service:ops-assistant}.as_count() * 100",
+                  "display_type": "line"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "y = 10",
+                  "display_type": "error dashed",
+                  "label": "Alert Threshold"
+                }
+              ]
+            }
+          },
+          {
+            "id": 32,
+            "definition": {
+              "type": "distribution",
+              "title": "RAGAS Faithfulness Score Distribution",
+              "requests": [
+                {
+                  "q": "avg:llmobs.evaluation.ragas_faithfulness{service:ops-assistant}"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "x = 0.7",
+                  "display_type": "error dashed",
+                  "label": "Minimum Acceptable"
+                }
+              ]
+            }
+          },
+          {
+            "id": 33,
+            "definition": {
+              "type": "timeseries",
+              "title": "Topic Relevancy Pass/Fail",
+              "requests": [
+                {
+                  "q": "sum:llmobs.evaluation.topic_relevancy.pass{service:ops-assistant}.as_count()",
+                  "display_type": "bars"
+                },
+                {
+                  "q": "sum:llmobs.evaluation.topic_relevancy.fail{service:ops-assistant}.as_count()",
+                  "display_type": "bars"
+                }
+              ]
+            }
+          },
+          {
+            "id": 34,
+            "definition": {
+              "type": "timeseries",
+              "title": "RAGAS Answer Relevancy Trend",
+              "requests": [
+                {
+                  "q": "avg:llmobs.evaluation.ragas_answer_relevancy{service:ops-assistant}",
+                  "display_type": "line"
+                }
+              ]
+            }
+          },
+          {
+            "id": 35,
+            "definition": {
+              "type": "timeseries",
+              "title": "Toxicity Detection Events",
+              "requests": [
+                {
+                  "q": "sum:llmobs.evaluation.toxicity.fail{service:ops-assistant}.as_count()",
+                  "display_type": "bars"
+                }
+              ]
+            }
+          },
+          {
+            "id": 36,
+            "definition": {
+              "type": "timeseries",
+              "title": "Negative Sentiment Trend",
+              "requests": [
+                {
+                  "q": "avg:llmobs.evaluation.negative_sentiment{service:ops-assistant}",
+                  "display_type": "line"
+                }
+              ]
+            }
+          },
+          {
+            "id": 37,
+            "definition": {
+              "type": "timeseries",
+              "title": "Prompt Injection Attempts",
+              "requests": [
+                {
+                  "q": "sum:llmobs.evaluation.prompt_injection.fail{service:ops-assistant}.as_count()",
+                  "display_type": "bars"
+                }
+              ]
+            }
+          },
+          {
+            "id": 38,
+            "definition": {
+              "type": "timeseries",
+              "title": "PII Exposure by Type",
+              "requests": [
+                {
+                  "q": "sum:sensitive_data_scanner.pii_detected{service:ops-assistant} by {pii_type}.as_count()",
+                  "display_type": "bars"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "definition": {
+        "type": "group",
+        "title": "Outcome & Human Verification",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 41,
+            "definition": {
+              "type": "query_value",
+              "title": "Approval Rate (%)",
+              "requests": [
+                {
+                  "q": "sum:agent.review.approve{service:ops-assistant}.as_count() / (sum:agent.review.approve{service:ops-assistant}.as_count() + sum:agent.review.edit{service:ops-assistant}.as_count() + sum:agent.review.reject{service:ops-assistant}.as_count()) * 100",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 80,
+                      "palette": "white_on_green"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 80,
+                      "palette": "white_on_yellow"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 42,
+            "definition": {
+              "type": "timeseries",
+              "title": "Review Outcomes",
+              "requests": [
+                {
+                  "q": "sum:agent.review.approve{service:ops-assistant}.as_count()",
+                  "display_type": "bars"
+                },
+                {
+                  "q": "sum:agent.review.edit{service:ops-assistant}.as_count()",
+                  "display_type": "bars"
+                },
+                {
+                  "q": "sum:agent.review.reject{service:ops-assistant}.as_count()",
+                  "display_type": "bars"
+                }
+              ]
+            }
+          },
+          {
+            "id": 43,
+            "definition": {
+              "type": "timeseries",
+              "title": "Handoff Required by Reason",
+              "requests": [
+                {
+                  "q": "sum:agent.handoff_required{service:ops-assistant} by {handoff_reason}.as_count()",
+                  "display_type": "bars"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 50,
+      "definition": {
+        "type": "group",
+        "title": "Operations & Actionable Items",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 51,
+            "definition": {
+              "type": "manage_status",
+              "title": "Monitor Status Panel",
+              "summary_type": "monitors",
+              "display_format": "countsAndList",
+              "query": "service:ops-assistant"
+            }
+          },
+          {
+            "id": 52,
+            "definition": {
+              "type": "event_stream",
+              "title": "Active Incidents & Cases",
+              "query": "sources:incident,case service:ops-assistant",
+              "event_size": "s"
+            }
+          },
+          {
+            "id": 53,
+            "definition": {
+              "type": "trace_service",
+              "title": "Worst Traces (Highest Latency)",
+              "service": "ops-assistant",
+              "span_name": "http.request",
+              "env": "production",
+              "display_format": "three_column",
+              "show_breakdown": true,
+              "show_distribution": true,
+              "show_errors": true,
+              "show_hits": true,
+              "show_latency": true,
+              "show_resource_list": true,
+              "size_format": "large"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "layout_type": "ordered",
+  "template_variables": [
+    {
+      "name": "env",
+      "default": "production",
+      "prefix": "env"
+    },
+    {
+      "name": "service",
+      "default": "ops-assistant",
+      "prefix": "service"
+    }
+  ]
+}

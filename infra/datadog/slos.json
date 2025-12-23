@@ -1,0 +1,164 @@
+{
+  "slos": [
+    {
+      "name": "Ops Assistant - Availability SLO",
+      "description": "99.9% of requests should complete successfully without errors",
+      "type": "metric",
+      "thresholds": [
+        {
+          "target": 99.9,
+          "timeframe": "30d",
+          "warning": 99.95
+        },
+        {
+          "target": 99.5,
+          "timeframe": "7d",
+          "warning": 99.7
+        }
+      ],
+      "query": {
+        "numerator": "sum:trace.http.request.hits{service:ops-assistant}.as_count() - sum:trace.http.request.errors{service:ops-assistant}.as_count()",
+        "denominator": "sum:trace.http.request.hits{service:ops-assistant}.as_count()"
+      },
+      "tags": [
+        "service:ops-assistant",
+        "slo_type:availability",
+        "team:ops"
+      ],
+      "monitor_ids": []
+    },
+    {
+      "name": "Ops Assistant - Latency SLO",
+      "description": "95% of the time, P95 latency should be under 10 seconds",
+      "type": "monitor",
+      "thresholds": [
+        {
+          "target": 95.0,
+          "timeframe": "30d",
+          "warning": 97.0
+        },
+        {
+          "target": 90.0,
+          "timeframe": "7d",
+          "warning": 92.0
+        }
+      ],
+      "tags": [
+        "service:ops-assistant",
+        "slo_type:latency",
+        "team:ops"
+      ],
+      "monitor_ids": [11175958]
+    },
+    {
+      "name": "Ops Assistant - Governance SLO",
+      "description": "99% of requests should stay within agent step budgets and have no tool failures",
+      "type": "metric",
+      "thresholds": [
+        {
+          "target": 99.0,
+          "timeframe": "30d",
+          "warning": 99.5
+        },
+        {
+          "target": 95.0,
+          "timeframe": "7d",
+          "warning": 97.0
+        }
+      ],
+      "query": {
+        "numerator": "sum:trace.http.request.hits{service:ops-assistant}.as_count() - sum:agent.step_budget_exceeded{service:ops-assistant}.as_count() - sum:agent.tool_error{service:ops-assistant}.as_count()",
+        "denominator": "sum:trace.http.request.hits{service:ops-assistant}.as_count()"
+      },
+      "tags": [
+        "service:ops-assistant",
+        "slo_type:governance",
+        "team:ops",
+        "team:ml"
+      ],
+      "monitor_ids": []
+    },
+    {
+      "name": "Ops Assistant - Quality SLO (Hallucination-Free)",
+      "description": "99.5% of requests should not produce hallucinated responses",
+      "type": "metric",
+      "thresholds": [
+        {
+          "target": 99.5,
+          "timeframe": "30d",
+          "warning": 99.7
+        },
+        {
+          "target": 98.0,
+          "timeframe": "7d",
+          "warning": 99.0
+        }
+      ],
+      "query": {
+        "numerator": "sum:llmobs.evaluation.hallucination.total{service:ops-assistant}.as_count() - sum:llmobs.evaluation.hallucination.fail{service:ops-assistant}.as_count()",
+        "denominator": "sum:llmobs.evaluation.hallucination.total{service:ops-assistant}.as_count()"
+      },
+      "tags": [
+        "service:ops-assistant",
+        "slo_type:quality",
+        "team:ml",
+        "evaluation:hallucination"
+      ],
+      "monitor_ids": []
+    }
+  ],
+  "slo_metadata": {
+    "created_by": "ops-assistant-deployment",
+    "purpose": "Track application health, performance, governance, and LLM quality metrics",
+    "alert_configuration": {
+      "availability_slo": {
+        "error_budget_alerts": [
+          {
+            "threshold": 50,
+            "message": "50% of availability error budget consumed. Review recent errors and incidents."
+          },
+          {
+            "threshold": 90,
+            "message": "90% of availability error budget consumed. CRITICAL - immediate action required."
+          }
+        ]
+      },
+      "latency_slo": {
+        "error_budget_alerts": [
+          {
+            "threshold": 50,
+            "message": "50% of latency error budget consumed. Review slow traces and performance metrics."
+          },
+          {
+            "threshold": 90,
+            "message": "90% of latency error budget consumed. CRITICAL - performance degradation."
+          }
+        ]
+      },
+      "governance_slo": {
+        "error_budget_alerts": [
+          {
+            "threshold": 50,
+            "message": "50% of governance error budget consumed. Review agent behaviour and tool reliability."
+          },
+          {
+            "threshold": 90,
+            "message": "90% of governance error budget consumed. CRITICAL - agent reliability issues."
+          }
+        ]
+      },
+      "quality_slo": {
+        "error_budget_alerts": [
+          {
+            "threshold": 25,
+            "message": "25% of quality error budget consumed. Review hallucination rates and model behaviour."
+          },
+          {
+            "threshold": 75,
+            "message": "75% of quality error budget consumed. CRITICAL - LLM quality degradation."
+          }
+        ]
+      }
+    }
+  }
+}
