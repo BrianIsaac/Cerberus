@@ -95,18 +95,15 @@
           {
             "id": 11,
             "definition": {
-              "type": "distribution",
-              "title": "Steps Distribution",
+              "type": "timeseries",
+              "title": "LLM Calls Over Time",
               "requests": [
                 {
-                  "q": "avg:agent.steps{service:ops-assistant} by {request_type}"
-                }
-              ],
-              "markers": [
-                {
-                  "value": "x = 8",
-                  "display_type": "error dashed",
-                  "label": "Step Budget Cap"
+                  "q": "sum:trace.llmobs.span.hits{span.kind:llm,service:ops-assistant}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "dog_classic"
+                  }
                 }
               ]
             }
@@ -115,10 +112,10 @@
             "id": 12,
             "definition": {
               "type": "query_value",
-              "title": "% Requests Hitting Step Cap",
+              "title": "LLM Span Error Rate (%)",
               "requests": [
                 {
-                  "q": "sum:agent.step_budget_exceeded{service:ops-assistant}.as_count() / sum:trace.http.request.hits{service:ops-assistant}.as_count() * 100",
+                  "q": "sum:trace.llmobs.span.errors{span.kind:llm,service:ops-assistant}.as_count() / sum:trace.llmobs.span.hits{span.kind:llm,service:ops-assistant}.as_count() * 100",
                   "conditional_formats": [
                     {
                       "comparator": ">",
@@ -144,18 +141,15 @@
             "id": 13,
             "definition": {
               "type": "timeseries",
-              "title": "Model Calls Distribution",
+              "title": "LLM Latency Distribution",
               "requests": [
                 {
-                  "q": "avg:agent.model_calls{service:ops-assistant} by {request_type}",
-                  "display_type": "bars"
-                }
-              ],
-              "markers": [
+                  "q": "avg:trace.llmobs.span.duration{span.kind:llm,service:ops-assistant}",
+                  "display_type": "line"
+                },
                 {
-                  "value": "y = 5",
-                  "display_type": "warning dashed",
-                  "label": "Model Call Budget"
+                  "q": "p95:trace.llmobs.span.duration{span.kind:llm,service:ops-assistant}",
+                  "display_type": "line"
                 }
               ]
             }
@@ -164,11 +158,14 @@
             "id": 14,
             "definition": {
               "type": "timeseries",
-              "title": "Tool Error Rate by Tool",
+              "title": "Tool Span Errors",
               "requests": [
                 {
-                  "q": "sum:agent.tool_error{service:ops-assistant} by {tool_name}.as_rate()",
-                  "display_type": "bars"
+                  "q": "sum:trace.llmobs.span.errors{span.kind:tool,service:ops-assistant}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "warm"
+                  }
                 }
               ]
             }
@@ -376,74 +373,6 @@
               "requests": [
                 {
                   "q": "sum:sensitive_data_scanner.pii_detected{service:ops-assistant} by {pii_type}.as_count()",
-                  "display_type": "bars"
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": 40,
-      "definition": {
-        "type": "group",
-        "title": "Outcome & Human Verification",
-        "layout_type": "ordered",
-        "widgets": [
-          {
-            "id": 41,
-            "definition": {
-              "type": "query_value",
-              "title": "Approval Rate (%)",
-              "requests": [
-                {
-                  "q": "sum:agent.review.approve{service:ops-assistant}.as_count() / (sum:agent.review.approve{service:ops-assistant}.as_count() + sum:agent.review.edit{service:ops-assistant}.as_count() + sum:agent.review.reject{service:ops-assistant}.as_count()) * 100",
-                  "conditional_formats": [
-                    {
-                      "comparator": ">",
-                      "value": 80,
-                      "palette": "white_on_green"
-                    },
-                    {
-                      "comparator": "<=",
-                      "value": 80,
-                      "palette": "white_on_yellow"
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "id": 42,
-            "definition": {
-              "type": "timeseries",
-              "title": "Review Outcomes",
-              "requests": [
-                {
-                  "q": "sum:agent.review.approve{service:ops-assistant}.as_count()",
-                  "display_type": "bars"
-                },
-                {
-                  "q": "sum:agent.review.edit{service:ops-assistant}.as_count()",
-                  "display_type": "bars"
-                },
-                {
-                  "q": "sum:agent.review.reject{service:ops-assistant}.as_count()",
-                  "display_type": "bars"
-                }
-              ]
-            }
-          },
-          {
-            "id": 43,
-            "definition": {
-              "type": "timeseries",
-              "title": "Handoff Required by Reason",
-              "requests": [
-                {
-                  "q": "sum:agent.handoff_required{service:ops-assistant} by {handoff_reason}.as_count()",
                   "display_type": "bars"
                 }
               ]
