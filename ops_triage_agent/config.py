@@ -16,11 +16,11 @@ class Settings(BaseSettings):
     dd_api_key: str = Field(alias="DD_API_KEY")
     dd_app_key: str = Field(alias="DD_APP_KEY")
     dd_site: str = Field(default="datadoghq.com", alias="DD_SITE")
-    dd_service: str = Field(default="ops-assistant", alias="DD_SERVICE")
+    dd_service: str = Field(default="ops-triage-agent", alias="DD_SERVICE")
     dd_env: str = Field(default="development", alias="DD_ENV")
     dd_version: str = Field(default="0.1.0", alias="DD_VERSION")
     dd_llmobs_enabled: bool = Field(default=True, alias="DD_LLMOBS_ENABLED")
-    dd_llmobs_ml_app: str = Field(default="ops-assistant", alias="DD_LLMOBS_ML_APP")
+    dd_llmobs_ml_app: str = Field(default="ops-triage-agent", alias="DD_LLMOBS_ML_APP")
     dd_llmobs_agentless_enabled: bool = Field(default=True, alias="DD_LLMOBS_AGENTLESS_ENABLED")
     dd_llmobs_evaluators: str = Field(
         default="ragas_faithfulness,ragas_context_precision,ragas_answer_relevancy",

@@ -13,7 +13,7 @@ from typing import Tuple
 
 import structlog
 
-from app.observability import emit_quality_metric
+from ops_triage_agent.observability import emit_quality_metric
 
 logger = structlog.get_logger()
 

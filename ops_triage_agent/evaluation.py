@@ -8,7 +8,7 @@ via DD_LLMOBS_EVALUATORS environment variable.
 import structlog
 from ddtrace.llmobs import LLMObs
 
-from app.observability import emit_quality_metric
+from ops_triage_agent.observability import emit_quality_metric
 
 logger = structlog.get_logger()
 

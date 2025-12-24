@@ -7,7 +7,7 @@ import httpx
 import structlog
 from fastmcp import Client
 
-from app.config import settings
+from ops_triage_agent.config import settings
 
 logger = structlog.get_logger()
 

@@ -8,7 +8,7 @@ from datadog import initialize as dd_initialize
 from datadog import statsd
 from ddtrace.llmobs import LLMObs
 
-from app.config import settings
+from ops_triage_agent.config import settings
 
 
 def setup_llm_observability():

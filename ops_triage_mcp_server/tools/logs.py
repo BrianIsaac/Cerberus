@@ -11,7 +11,7 @@ from datadog_api_client.v2.model.logs_query_filter import LogsQueryFilter
 from datadog_api_client.v2.model.logs_sort import LogsSort
 from fastmcp import FastMCP
 
-from mcp_server.tools import DD_SITE, get_datadog_config
+from ops_triage_mcp_server.tools import DD_SITE, get_datadog_config
 
 
 def register_logs_tools(mcp: FastMCP) -> None:

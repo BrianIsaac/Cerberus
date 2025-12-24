@@ -17,7 +17,7 @@ from datadog_api_client.v2.model.incident_create_request import IncidentCreateRe
 from datadog_api_client.v2.model.incident_type import IncidentType
 from fastmcp import FastMCP
 
-from mcp_server.tools import DD_SITE, get_datadog_config
+from ops_triage_mcp_server.tools import DD_SITE, get_datadog_config
 
 
 def register_incidents_tools(mcp: FastMCP) -> None:

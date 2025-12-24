@@ -11,7 +11,7 @@ from datadog_api_client.v2.model.spans_query_filter import SpansQueryFilter
 from datadog_api_client.v2.model.spans_sort import SpansSort
 from fastmcp import FastMCP
 
-from mcp_server.tools import DD_SITE, get_datadog_config
+from ops_triage_mcp_server.tools import DD_SITE, get_datadog_config
 
 
 def register_traces_tools(mcp: FastMCP) -> None:

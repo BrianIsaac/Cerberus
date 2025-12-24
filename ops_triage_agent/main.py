@@ -9,10 +9,10 @@ import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.agent.workflow import resume_workflow, run_triage_workflow
-from app.config import settings
-from app.logging_config import configure_logging
-from app.models.schemas import (
+from ops_triage_agent.agent.workflow import resume_workflow, run_triage_workflow
+from ops_triage_agent.config import settings
+from ops_triage_agent.logging_config import configure_logging
+from ops_triage_agent.models.schemas import (
     AskRequest,
     AskResponse,
     HealthResponse,
@@ -22,7 +22,7 @@ from app.models.schemas import (
     TriageRequest,
     TriageResponse,
 )
-from app.observability import (
+from ops_triage_agent.observability import (
     emit_request_metrics,
     emit_review_outcome,
     setup_custom_metrics,

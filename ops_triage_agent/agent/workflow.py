@@ -5,7 +5,7 @@ from ddtrace.llmobs.decorators import workflow as llmobs_workflow
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from app.agent.nodes import (
+from ops_triage_agent.agent.nodes import (
     approval_node,
     approval_router,
     clarification_node,
@@ -19,8 +19,8 @@ from app.agent.nodes import (
     synthesis_router,
     writeback_node,
 )
-from app.agent.state import AgentState, create_initial_state
-from app.config import settings
+from ops_triage_agent.agent.state import AgentState, create_initial_state
+from ops_triage_agent.config import settings
 
 logger = structlog.get_logger()
 

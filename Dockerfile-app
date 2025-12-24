@@ -54,9 +54,9 @@ WORKDIR ${REPO_DIR}
 
 COPY --from=build --chown=${NON_ROOT_USER}:${NON_ROOT_GID} ${REPO_DIR} ${REPO_DIR}
 
-COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} app/ app/
+COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} ops_triage_agent/ ops_triage_agent/
 
 EXPOSE 8080
 
 ENTRYPOINT ["ddtrace-run"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "ops_triage_agent.main:app", "--host", "0.0.0.0", "--port", "8080"]

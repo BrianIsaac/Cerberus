@@ -5,7 +5,7 @@ import logging
 import structlog
 from ddtrace import tracer
 
-from app.config import settings
+from ops_triage_agent.config import settings
 
 
 def add_datadog_trace_context(

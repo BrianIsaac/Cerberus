@@ -51,8 +51,8 @@ WORKDIR ${REPO_DIR}
 
 COPY --from=build --chown=${NON_ROOT_USER}:${NON_ROOT_GID} ${REPO_DIR} ${REPO_DIR}
 
-COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} mcp_server/ mcp_server/
+COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} ops_triage_mcp_server/ ops_triage_mcp_server/
 
 EXPOSE 8080
 
-CMD ["python", "mcp_server/server.py"]
+CMD ["python", "-m", "ops_triage_mcp_server.server"]

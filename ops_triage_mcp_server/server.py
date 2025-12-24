@@ -11,12 +11,12 @@ from fastmcp import FastMCP
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
-from mcp_server.tools.dashboards import register_dashboards_tools  # noqa: E402
-from mcp_server.tools.incidents import register_incidents_tools  # noqa: E402
-from mcp_server.tools.logs import register_logs_tools  # noqa: E402
-from mcp_server.tools.metrics import register_metrics_tools  # noqa: E402
-from mcp_server.tools.monitors import register_monitors_tools  # noqa: E402
-from mcp_server.tools.traces import register_traces_tools  # noqa: E402
+from ops_triage_mcp_server.tools.dashboards import register_dashboards_tools  # noqa: E402
+from ops_triage_mcp_server.tools.incidents import register_incidents_tools  # noqa: E402
+from ops_triage_mcp_server.tools.logs import register_logs_tools  # noqa: E402
+from ops_triage_mcp_server.tools.metrics import register_metrics_tools  # noqa: E402
+from ops_triage_mcp_server.tools.monitors import register_monitors_tools  # noqa: E402
+from ops_triage_mcp_server.tools.traces import register_traces_tools  # noqa: E402
 
 mcp = FastMCP(
     name="Datadog MCP Server",

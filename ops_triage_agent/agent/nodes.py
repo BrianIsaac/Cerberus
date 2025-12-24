@@ -11,7 +11,7 @@ from google import genai
 from google.genai.types import GenerateContentConfig, HttpOptions
 from langgraph.types import interrupt
 
-from app.agent.state import (
+from ops_triage_agent.agent.state import (
     AgentState,
     CollectedEvidence,
     Hypothesis,
@@ -19,24 +19,24 @@ from app.agent.state import (
     ProposedAction,
     WorkflowStage,
 )
-from app.config import settings
-from app.mcp_client.client import DatadogMCPClient
-from app.observability import (
+from ops_triage_agent.config import settings
+from ops_triage_agent.mcp_client.client import DatadogMCPClient
+from ops_triage_agent.observability import (
     emit_budget_exceeded,
     emit_escalation,
     emit_quality_metric,
     emit_review_outcome,
 )
-from app.prompts.intake_v1 import (
+from ops_triage_agent.prompts.intake_v1 import (
     CLARIFICATION_PROMPT,
     INTAKE_SYSTEM_PROMPT,
     INTAKE_USER_TEMPLATE,
 )
-from app.prompts.synthesis_v1 import (
+from ops_triage_agent.prompts.synthesis_v1 import (
     SYNTHESIS_SYSTEM_PROMPT,
     SYNTHESIS_USER_TEMPLATE,
 )
-from app.security import validate_input
+from ops_triage_agent.security import validate_input
 
 logger = structlog.get_logger()
 
