@@ -27,7 +27,7 @@ LLMObs.enable(
     agentless_enabled=True,
 )
 
-from app.mcp_client.client import DatadogMCPClient
+from ops_triage_agent.mcp_client.client import DatadogMCPClient
 
 
 async def main():

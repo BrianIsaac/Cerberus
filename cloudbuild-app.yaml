@@ -1,5 +1,5 @@
 # Cloud Build config for main Ops Assistant app
-# Trigger: Push to main with changes in app/** or Dockerfile-app
+# Trigger: Push to main with changes in ops_triage_agent/** or Dockerfile-app
 #
 # Required substitutions (set in trigger or via --substitutions):
 #   _REGION: Cloud Run region (default: us-central1)

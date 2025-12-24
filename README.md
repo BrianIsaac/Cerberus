@@ -79,10 +79,10 @@ sudo docker run -d --name dd-agent \
   datadog/agent:latest
 
 # 2. Start MCP server (terminal 1)
-uv run python mcp_server/server.py
+uv run python -m ops_triage_mcp_server.server
 
 # 3. Start main app with tracing (terminal 2)
-uv run ddtrace-run uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv run ddtrace-run uvicorn ops_triage_agent.main:app --host 0.0.0.0 --port 8000
 
 # 4. Test the endpoint
 curl -X POST http://localhost:8000/ask \
@@ -106,7 +106,7 @@ sudo docker stop dd-agent && sudo docker rm dd-agent
 
 ```
 ops-assistant/
-├── app/
+├── ops_triage_agent/
 │   ├── main.py              # FastAPI application
 │   ├── config.py            # Settings management
 │   ├── logging_config.py    # Structured logging with Datadog correlation
@@ -122,7 +122,7 @@ ops-assistant/
 │   │   └── client.py        # MCP client wrapper
 │   └── models/
 │       └── schemas.py       # Pydantic request/response models
-├── mcp_server/
+├── ops_triage_mcp_server/
 │   ├── server.py            # FastMCP server entry point
 │   └── tools/               # Datadog API tools
 │       ├── metrics.py       # get_metrics
@@ -251,13 +251,13 @@ The project includes Cloud Build configs for automated deployments.
 2. **Create MCP Server trigger:**
    - Name: `deploy-mcp-server`
    - Event: Push to branch `^main$`
-   - Included files: `mcp_server/**`, `Dockerfile-mcp`, `cloudbuild-mcp.yaml`, `pyproject.toml`, `uv.lock`
+   - Included files: `ops_triage_mcp_server/**`, `Dockerfile-mcp`, `cloudbuild-mcp.yaml`, `pyproject.toml`, `uv.lock`
    - Config: `cloudbuild-mcp.yaml`
 
 3. **Create Main App trigger:**
    - Name: `deploy-ops-assistant`
    - Event: Push to branch `^main$`
-   - Included files: `app/**`, `Dockerfile-app`, `cloudbuild-app.yaml`, `pyproject.toml`, `uv.lock`
+   - Included files: `ops_triage_agent/**`, `Dockerfile-app`, `cloudbuild-app.yaml`, `pyproject.toml`, `uv.lock`
    - Config: `cloudbuild-app.yaml`
 
 ### Manual Deployment
