@@ -12,6 +12,7 @@ A bounded, incident-ready ops assistant that converts Datadog telemetry into act
 - Full observability via Datadog APM, LLM Observability, and custom metrics
 - Security hardening: prompt injection detection, PII detection and redaction
 - Quality evaluation: RAGAS integration (faithfulness, answer relevancy)
+- **Streamlit Frontends**: Chat UIs for ops triage and SAS code generation
 
 ## Architecture
 
@@ -69,28 +70,34 @@ cp .env.example .env
 ### Running Locally
 
 ```bash
-# 1. Start Datadog agent (for metrics/traces)
-sudo docker run -d --name dd-agent \
-  --network host \
-  -e DD_API_KEY=your-api-key \
-  -e DD_SITE=datadoghq.com \
-  -e DD_HOSTNAME=ops-assistant-local \
-  -e DD_APM_ENABLED=true \
-  datadog/agent:latest
-
-# 2. Start MCP server (terminal 1)
+# 1. Start MCP server (terminal 1)
 uv run python -m ops_triage_mcp_server.server
 
-# 3. Start main app with tracing (terminal 2)
-uv run ddtrace-run uvicorn ops_triage_agent.main:app --host 0.0.0.0 --port 8000
+# 2. Start backend API (terminal 2)
+uv run uvicorn ops_triage_agent.main:app --host 0.0.0.0 --port 8080
 
-# 4. Test the endpoint
-curl -X POST http://localhost:8000/ask \
+# 3. Start Ops Assistant Frontend (terminal 3)
+OPS_TRIAGE_AGENT_URL=http://localhost:8080 uv run streamlit run ops_assistant_frontend/app.py
+
+# 4. Start SAS Query Generator (terminal 4)
+uv run streamlit run sas_generator/app.py --server.port=8502
+
+# Test the API endpoint directly
+curl -X POST http://localhost:8080/ask \
   -H "Content-Type: application/json" \
   -d '{"question": "Why is api-gateway slow?", "service": "api-gateway"}'
+```
 
-# Stop agent when done
-sudo docker stop dd-agent && sudo docker rm dd-agent
+### Running with Docker
+
+```bash
+# Build and run Ops Assistant Frontend
+docker build -f Dockerfile-ops-frontend -t ops-frontend .
+docker run -p 8501:8080 -e OPS_TRIAGE_AGENT_URL=http://host.docker.internal:8080 ops-frontend
+
+# Build and run SAS Generator
+docker build -f Dockerfile-sas-generator -t sas-generator .
+docker run -p 8502:8080 sas-generator
 ```
 
 ### API Endpoints
@@ -106,49 +113,40 @@ sudo docker stop dd-agent && sudo docker rm dd-agent
 
 ```
 ops-assistant/
-├── ops_triage_agent/
-│   ├── main.py              # FastAPI application
-│   ├── config.py            # Settings management
-│   ├── logging_config.py    # Structured logging with Datadog correlation
-│   ├── observability.py     # LLM Obs and custom metrics
-│   ├── security.py          # Prompt injection and PII detection
-│   ├── evaluation.py        # Custom quality evaluation submission
-│   ├── agent/
-│   │   ├── state.py         # LangGraph state schema
-│   │   ├── nodes.py         # Workflow nodes (intake, collect, synthesis)
-│   │   └── workflow.py      # LangGraph workflow graph
-│   ├── prompts/             # LLM prompt templates
-│   ├── mcp_client/
-│   │   └── client.py        # MCP client wrapper
-│   └── models/
-│       └── schemas.py       # Pydantic request/response models
-├── ops_triage_mcp_server/
-│   ├── server.py            # FastMCP server entry point
-│   └── tools/               # Datadog API tools
-│       ├── metrics.py       # get_metrics
-│       ├── logs.py          # get_logs
-│       ├── traces.py        # list_spans, get_trace
-│       ├── incidents.py     # create_incident, create_case, list/get
-│       ├── monitors.py      # list_monitors
-│       └── dashboards.py    # list_dashboards
+├── ops_triage_agent/           # Backend API for incident triage
+│   ├── main.py                 # FastAPI application
+│   ├── config.py               # Settings management
+│   ├── observability.py        # LLM Obs and custom metrics
+│   ├── agent/                  # LangGraph workflow
+│   └── mcp_client/             # MCP client wrapper
+├── ops_triage_mcp_server/      # MCP server for Datadog tools
+│   ├── server.py               # FastMCP server entry point
+│   └── tools/                  # Datadog API tools (metrics, logs, traces, etc.)
+├── ops_assistant_frontend/     # Streamlit chat UI for triage
+│   ├── app.py                  # Streamlit application
+│   ├── config.py               # Settings
+│   ├── api_client.py           # Backend API client
+│   └── observability.py        # LLM Obs setup
+├── sas_generator/              # Streamlit app for SAS code generation
+│   ├── app.py                  # Streamlit application
+│   ├── generator.py            # Gemini code generation
+│   ├── prompts.py              # System prompts and schemas
+│   └── sashelp_schemas.py      # SASHELP dataset definitions
+├── sas_mcp_server/             # MCP server for SAS data tools
+│   ├── server.py               # FastMCP server entry point
+│   └── tools/                  # Dataset and procedure tools
 ├── scripts/
-│   └── traffic_gen.py       # Traffic generator for demo/testing
+│   └── traffic_gen.py          # Traffic generator for demo/testing
 ├── infra/
-│   ├── cloudrun/            # Cloud Run deployment configs
-│   │   ├── service-with-sidecar.yaml # Cloud Run + Datadog Agent sidecar
-│   │   ├── setup_secrets.sh      # Secret Manager setup
-│   │   ├── deploy_mcp_server.sh  # Deploy MCP server
-│   │   ├── configure_iam.sh      # Service-to-service IAM
-│   │   └── deploy.sh             # Deploy main app
-│   └── datadog/             # Datadog configuration
-│       ├── dashboard.json   # Dashboard with 5 widget groups
-│       ├── monitors.json    # 8 monitors with incident automation
-│       ├── slos.json        # 4 SLOs (availability, latency, governance, quality)
-│       └── apply_config.sh  # Deploy script (auto-loads .env)
-├── tests/                   # Test suite
-├── Dockerfile-app           # Multi-stage build for main app (Cloud Run)
-├── Dockerfile-mcp           # Multi-stage build for MCP server (Cloud Run)
-└── pyproject.toml           # Project dependencies
+│   ├── cloudrun/               # Cloud Run deployment configs
+│   └── datadog/                # Dashboard, monitors, SLOs
+├── tests/                      # Test suite
+├── Dockerfile-app              # Ops triage agent
+├── Dockerfile-mcp              # Ops triage MCP server
+├── Dockerfile-sas-generator    # SAS generator Streamlit
+├── Dockerfile-sas-mcp-server   # SAS MCP server
+├── Dockerfile-ops-frontend     # Ops assistant frontend Streamlit
+└── pyproject.toml              # Project dependencies
 ```
 
 ## Traffic Generator
