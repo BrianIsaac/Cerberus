@@ -1,5 +1,5 @@
 # Cloud Build config for MCP server
-# Trigger: Push to main with changes in ops_triage_mcp_server/** or Dockerfile-mcp
+# Trigger: Push to main with changes in ops_triage_mcp_server/** or Dockerfile-ops-triage-mcp-server
 #
 # Required substitutions (set in trigger or via --substitutions):
 #   _REGION: Cloud Run region (default: us-central1)
@@ -20,7 +20,7 @@ steps:
       - '-t'
       - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
       - '-f'
-      - 'Dockerfile-mcp'
+      - 'Dockerfile-ops-triage-mcp-server'
       - '.'
     env:
       - 'DOCKER_BUILDKIT=1'

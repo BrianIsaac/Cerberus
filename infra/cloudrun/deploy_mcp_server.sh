@@ -41,7 +41,7 @@ echo "Building MCP server image..."
 gcloud builds submit \
     --tag ${IMAGE} \
     --project ${PROJECT_ID} \
-    --dockerfile Dockerfile-mcp \
+    --dockerfile Dockerfile-ops-triage-mcp-server \
     .
 
 # Deploy to Cloud Run

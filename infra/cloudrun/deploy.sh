@@ -48,7 +48,7 @@ echo "Building main application image..."
 gcloud builds submit \
     --tag ${IMAGE} \
     --project ${PROJECT_ID} \
-    --dockerfile Dockerfile-app \
+    --dockerfile Dockerfile-ops-triage-agent \
     .
 
 # Deploy to Cloud Run with LLM-optimised settings
