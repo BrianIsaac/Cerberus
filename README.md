@@ -141,8 +141,8 @@ ops-assistant/
 │   ├── cloudrun/               # Cloud Run deployment configs
 │   └── datadog/                # Dashboard, monitors, SLOs
 ├── tests/                      # Test suite
-├── Dockerfile-app              # Ops triage agent
-├── Dockerfile-mcp              # Ops triage MCP server
+├── Dockerfile-ops-triage-agent       # Ops triage agent
+├── Dockerfile-ops-triage-mcp-server  # Ops triage MCP server
 ├── Dockerfile-sas-generator    # SAS generator Streamlit
 ├── Dockerfile-sas-mcp-server   # SAS MCP server
 ├── Dockerfile-ops-frontend     # Ops assistant frontend Streamlit
@@ -204,12 +204,14 @@ cd infra/datadog
 ./apply_config.sh  # Reads DD_API_KEY and DD_APP_KEY from .env
 ```
 
-**Dashboard** (5 widget groups):
+**Dashboard** (7 widget groups with multi-service filtering):
 - Application Health: request volume, P95 latency, error rate, Gemini LLM latency
 - Governance & Autonomy: Gemini LLM calls, LangGraph workflow calls, latency, errors
 - MCP Tools Performance: tool invocations, latency (avg/P95), error rate, Apdex score
 - Quality Evaluations: RAGAS faithfulness/relevancy scores, evaluation calls, confidence scores
 - Operations: monitor status panel, incidents/cases, worst traces
+- SAS Query Generator: query volume, generation latency, feedback rate, error rate
+- Ops Assistant Frontend: request volume, latency, backend connectivity, session metrics
 
 **Monitors** (8 total):
 - High P95 Latency (>10s)
@@ -249,13 +251,13 @@ The project includes Cloud Build configs for automated deployments.
 2. **Create MCP Server trigger:**
    - Name: `deploy-mcp-server`
    - Event: Push to branch `^main$`
-   - Included files: `ops_triage_mcp_server/**`, `Dockerfile-mcp`, `cloudbuild-mcp.yaml`, `pyproject.toml`, `uv.lock`
+   - Included files: `ops_triage_mcp_server/**`, `Dockerfile-ops-triage-mcp-server`, `cloudbuild-mcp.yaml`, `pyproject.toml`, `uv.lock`
    - Config: `cloudbuild-mcp.yaml`
 
 3. **Create Main App trigger:**
    - Name: `deploy-ops-assistant`
    - Event: Push to branch `^main$`
-   - Included files: `ops_triage_agent/**`, `Dockerfile-app`, `cloudbuild-app.yaml`, `pyproject.toml`, `uv.lock`
+   - Included files: `ops_triage_agent/**`, `Dockerfile-ops-triage-agent`, `cloudbuild-app.yaml`, `pyproject.toml`, `uv.lock`
    - Config: `cloudbuild-app.yaml`
 
 ### Manual Deployment
@@ -284,7 +286,7 @@ gcloud run services replace infra/cloudrun/service-with-sidecar.yaml --region us
 
 ### Key Datadog Resources
 - **LLM Obs Traces** (Primary): https://ap1.datadoghq.com/llm/traces?query=%40ml_app%3Aops-assistant
-- **Dashboard**: https://ap1.datadoghq.com/dashboard/k3b-pcm-45c
+- **Dashboard**: https://ap1.datadoghq.com/dashboard/vy8-sk9-yxg
 - **Monitors**: https://ap1.datadoghq.com/monitors/manage?q=service%3Aops-assistant
 
 ### Cloud Run Observability with Datadog Agent Sidecar

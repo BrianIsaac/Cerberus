@@ -1,6 +1,6 @@
 {
   "title": "Ops Assistant Health",
-  "description": "Comprehensive health dashboard for Ops Assistant with throughput, latency, errors, autonomy, quality, and outcome metrics",
+  "description": "Comprehensive health dashboard for Ops Assistant with throughput, latency, errors, autonomy, quality, and outcome metrics. Supports multi-service filtering via template variables.",
   "widgets": [
     {
       "id": 0,
@@ -16,7 +16,7 @@
               "title": "Request Volume",
               "requests": [
                 {
-                  "q": "sum:trace.http.request.hits{service:ops-assistant}.as_count()",
+                  "q": "sum:trace.http.request.hits{$service,$env}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "dog_classic"
@@ -32,7 +32,7 @@
               "title": "P95 Request Latency",
               "requests": [
                 {
-                  "q": "p95:trace.http.request.duration{service:ops-assistant}",
+                  "q": "p95:trace.http.request.duration{$service,$env}",
                   "display_type": "line"
                 }
               ],
@@ -52,7 +52,7 @@
               "title": "Error Rate (%)",
               "requests": [
                 {
-                  "q": "sum:trace.http.request.errors{service:ops-assistant}.as_count() / sum:trace.http.request.hits{service:ops-assistant}.as_count() * 100",
+                  "q": "sum:trace.http.request.errors{$service,$env}.as_count() / sum:trace.http.request.hits{$service,$env}.as_count() * 100",
                   "conditional_formats": [
                     {
                       "comparator": ">",
@@ -76,7 +76,7 @@
               "title": "Gemini LLM Latency (P95)",
               "requests": [
                 {
-                  "q": "p95:trace.google_genai.request{service:ops-assistant}",
+                  "q": "p95:trace.google_genai.request{$service,$env}",
                   "display_type": "line"
                 }
               ]
@@ -99,7 +99,7 @@
               "title": "Gemini LLM Calls Over Time",
               "requests": [
                 {
-                  "q": "sum:trace.google_genai.request.hits{service:ops-assistant}.as_count()",
+                  "q": "sum:trace.google_genai.request.hits{$service,$env}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "dog_classic"
@@ -115,7 +115,7 @@
               "title": "LangGraph Workflow Calls",
               "requests": [
                 {
-                  "q": "sum:trace.langgraph.request.hits{service:ops-assistant}.as_count()",
+                  "q": "sum:trace.langgraph.request.hits{$service,$env}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "cool"
@@ -131,11 +131,11 @@
               "title": "Gemini LLM Latency (avg vs P95)",
               "requests": [
                 {
-                  "q": "avg:trace.google_genai.request{service:ops-assistant}",
+                  "q": "avg:trace.google_genai.request{$service,$env}",
                   "display_type": "line"
                 },
                 {
-                  "q": "p95:trace.google_genai.request{service:ops-assistant}",
+                  "q": "p95:trace.google_genai.request{$service,$env}",
                   "display_type": "line"
                 }
               ]
@@ -148,7 +148,7 @@
               "title": "LangGraph Errors",
               "requests": [
                 {
-                  "q": "sum:trace.langgraph.request.errors{service:ops-assistant}.as_count()",
+                  "q": "sum:trace.langgraph.request.errors{$service,$env}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "warm"
@@ -174,7 +174,7 @@
               "title": "MCP Tool Invocations",
               "requests": [
                 {
-                  "q": "sum:trace.mcp.request.hits{service:ops-assistant}.as_count()",
+                  "q": "sum:trace.mcp.request.hits{$service,$env}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "dog_classic"
@@ -190,11 +190,11 @@
               "title": "MCP Tool Latency (avg vs P95)",
               "requests": [
                 {
-                  "q": "avg:trace.mcp.request{service:ops-assistant}",
+                  "q": "avg:trace.mcp.request{$service,$env}",
                   "display_type": "line"
                 },
                 {
-                  "q": "p95:trace.mcp.request{service:ops-assistant}",
+                  "q": "p95:trace.mcp.request{$service,$env}",
                   "display_type": "line"
                 }
               ]
@@ -207,7 +207,7 @@
               "title": "MCP Error Rate (%)",
               "requests": [
                 {
-                  "q": "sum:trace.mcp.request.errors{service:ops-assistant}.as_count() / sum:trace.mcp.request.hits{service:ops-assistant}.as_count() * 100",
+                  "q": "sum:trace.mcp.request.errors{$service,$env}.as_count() / sum:trace.mcp.request.hits{$service,$env}.as_count() * 100",
                   "conditional_formats": [
                     {
                       "comparator": ">",
@@ -236,7 +236,7 @@
               "title": "MCP Apdex Score",
               "requests": [
                 {
-                  "q": "avg:trace.mcp.request.apdex{service:ops-assistant}",
+                  "q": "avg:trace.mcp.request.apdex{$service,$env}",
                   "conditional_formats": [
                     {
                       "comparator": ">",
@@ -275,7 +275,7 @@
               "title": "RAGAS Faithfulness Score",
               "requests": [
                 {
-                  "q": "avg:ops_assistant.agent.quality.ragas_faithfulness{*}",
+                  "q": "avg:ops_assistant.agent.quality.ragas_faithfulness{$env}",
                   "display_type": "line"
                 }
               ],
@@ -295,7 +295,7 @@
               "title": "RAGAS Answer Relevancy Score",
               "requests": [
                 {
-                  "q": "avg:ops_assistant.agent.quality.ragas_answer_relevancy{*}",
+                  "q": "avg:ops_assistant.agent.quality.ragas_answer_relevancy{$env}",
                   "display_type": "line"
                 }
               ],
@@ -315,7 +315,7 @@
               "title": "RAGAS Evaluation Calls",
               "requests": [
                 {
-                  "q": "sum:trace.dd_ragas.faithfulness.hits{service:ops-assistant}.as_count()",
+                  "q": "sum:trace.dd_ragas.faithfulness.hits{$service,$env}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "dog_classic"
@@ -331,7 +331,7 @@
               "title": "Intake Confidence Score",
               "requests": [
                 {
-                  "q": "avg:ops_assistant.agent.quality.intake_confidence{*}",
+                  "q": "avg:ops_assistant.agent.quality.intake_confidence{$env}",
                   "display_type": "line"
                 }
               ],
@@ -351,7 +351,7 @@
               "title": "Synthesis Confidence Score",
               "requests": [
                 {
-                  "q": "avg:ops_assistant.agent.quality.synthesis_confidence{*}",
+                  "q": "avg:ops_assistant.agent.quality.synthesis_confidence{$env}",
                   "display_type": "line"
                 }
               ],
@@ -371,7 +371,7 @@
               "title": "OpenAI Evaluation API Calls",
               "requests": [
                 {
-                  "q": "sum:trace.openai.request.hits{service:ops-assistant}.as_count()",
+                  "q": "sum:trace.openai.request.hits{$service,$env}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "cool"
@@ -397,7 +397,7 @@
               "title": "Monitor Status Panel",
               "summary_type": "monitors",
               "display_format": "countsAndList",
-              "query": "service:ops-assistant"
+              "query": "$service"
             }
           },
           {
@@ -405,7 +405,7 @@
             "definition": {
               "type": "event_stream",
               "title": "Active Incidents & Cases",
-              "query": "sources:incident,case service:ops-assistant",
+              "query": "sources:incident,case $service",
               "event_size": "s"
             }
           },
@@ -414,9 +414,9 @@
             "definition": {
               "type": "trace_service",
               "title": "Worst Traces (Highest Latency)",
-              "service": "ops-assistant",
+              "service": "",
               "span_name": "http.request",
-              "env": "production",
+              "env": "$env",
               "display_format": "three_column",
               "show_breakdown": true,
               "show_distribution": true,
@@ -429,19 +429,223 @@
           }
         ]
       }
+    },
+    {
+      "id": 60,
+      "definition": {
+        "type": "group",
+        "title": "SAS Query Generator",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 61,
+            "definition": {
+              "type": "timeseries",
+              "title": "Query Generation Volume",
+              "requests": [
+                {
+                  "q": "sum:trace.google_genai.request.hits{service:sas-query-generator,$env}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "dog_classic"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 62,
+            "definition": {
+              "type": "timeseries",
+              "title": "Generation Latency (P95)",
+              "requests": [
+                {
+                  "q": "p95:trace.google_genai.request{service:sas-query-generator,$env}",
+                  "display_type": "line"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "y = 5",
+                  "display_type": "error dashed",
+                  "label": "SLO (5s)"
+                }
+              ]
+            }
+          },
+          {
+            "id": 63,
+            "definition": {
+              "type": "query_value",
+              "title": "Positive Feedback Rate (%)",
+              "requests": [
+                {
+                  "q": "sum:sas_generator.feedback.positive{$env}.as_count() / (sum:sas_generator.feedback.positive{$env}.as_count() + sum:sas_generator.feedback.negative{$env}.as_count()) * 100",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 80,
+                      "palette": "white_on_green"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 80,
+                      "palette": "white_on_yellow"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 50,
+                      "palette": "white_on_red"
+                    }
+                  ]
+                }
+              ],
+              "precision": 1
+            }
+          },
+          {
+            "id": 64,
+            "definition": {
+              "type": "query_value",
+              "title": "Query Error Rate (%)",
+              "requests": [
+                {
+                  "q": "sum:sas_generator.queries.error{$env}.as_count() / (sum:sas_generator.queries.success{$env}.as_count() + sum:sas_generator.queries.error{$env}.as_count()) * 100",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 5,
+                      "palette": "white_on_red"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 5,
+                      "palette": "white_on_green"
+                    }
+                  ]
+                }
+              ],
+              "precision": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 70,
+      "definition": {
+        "type": "group",
+        "title": "Ops Assistant Frontend",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 71,
+            "definition": {
+              "type": "timeseries",
+              "title": "Frontend Request Volume",
+              "requests": [
+                {
+                  "q": "sum:trace.http.request.hits{service:ops-assistant-frontend,$env}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "dog_classic"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 72,
+            "definition": {
+              "type": "timeseries",
+              "title": "Frontend API Latency (P95)",
+              "requests": [
+                {
+                  "q": "p95:trace.http.request.duration{service:ops-assistant-frontend,$env}",
+                  "display_type": "line"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "y = 30",
+                  "display_type": "error dashed",
+                  "label": "SLO (30s)"
+                }
+              ]
+            }
+          },
+          {
+            "id": 73,
+            "definition": {
+              "type": "query_value",
+              "title": "Frontend Error Rate (%)",
+              "requests": [
+                {
+                  "q": "sum:trace.http.request.errors{service:ops-assistant-frontend,$env}.as_count() / sum:trace.http.request.hits{service:ops-assistant-frontend,$env}.as_count() * 100",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 5,
+                      "palette": "white_on_red"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 5,
+                      "palette": "white_on_green"
+                    }
+                  ]
+                }
+              ],
+              "precision": 1
+            }
+          },
+          {
+            "id": 74,
+            "definition": {
+              "type": "timeseries",
+              "title": "Backend API Calls",
+              "requests": [
+                {
+                  "q": "sum:trace.httpx.request.hits{service:ops-assistant-frontend,$env}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "cool"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
     }
   ],
   "layout_type": "ordered",
   "template_variables": [
     {
       "name": "env",
-      "default": "production",
-      "prefix": "env"
+      "default": "*",
+      "prefix": "env",
+      "available_values": ["production", "staging", "development"]
     },
     {
       "name": "service",
-      "default": "ops-assistant",
-      "prefix": "service"
+      "default": "*",
+      "prefix": "service",
+      "available_values": [
+        "ops-assistant",
+        "sas-query-generator",
+        "ops-assistant-frontend"
+      ]
+    },
+    {
+      "name": "ml_app",
+      "default": "*",
+      "prefix": "ml_app",
+      "available_values": [
+        "ops-assistant",
+        "sas-query-generator",
+        "ops-assistant-frontend"
+      ]
     }
   ]
 }
