@@ -43,6 +43,7 @@ ENV PYTHONIOENCODING=utf8 \
     LANG="C.UTF-8" \
     LC_ALL="C.UTF-8" \
     PATH="${HOME_DIR}/.local/bin:${REPO_DIR}/.venv/bin:$PATH" \
+    PYTHONPATH="${REPO_DIR}" \
     DD_TRACE_ENABLED=true \
     DD_LOGS_INJECTION=true \
     DD_LLMOBS_ENABLED=1 \

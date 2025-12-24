@@ -260,6 +260,18 @@ The project includes Cloud Build configs for automated deployments.
    - Included files: `ops_triage_agent/**`, `Dockerfile-ops-triage-agent`, `cloudbuild-app.yaml`, `pyproject.toml`, `uv.lock`
    - Config: `cloudbuild-app.yaml`
 
+4. **Create SAS Generator trigger:**
+   - Name: `deploy-sas-generator`
+   - Event: Push to branch `^main$`
+   - Included files: `sas_generator/**`, `Dockerfile-sas-generator`, `cloudbuild-sas-generator.yaml`, `pyproject.toml`, `uv.lock`
+   - Config: `cloudbuild-sas-generator.yaml`
+
+5. **Create Ops Frontend trigger:**
+   - Name: `deploy-ops-frontend`
+   - Event: Push to branch `^main$`
+   - Included files: `ops_assistant_frontend/**`, `Dockerfile-ops-frontend`, `cloudbuild-ops-frontend.yaml`, `pyproject.toml`, `uv.lock`
+   - Config: `cloudbuild-ops-frontend.yaml`
+
 ### Manual Deployment
 
 ```bash
@@ -269,6 +281,12 @@ gcloud builds submit --config cloudbuild-mcp.yaml
 # Deploy main app (via Cloud Build)
 gcloud builds submit --config cloudbuild-app.yaml
 
+# Deploy SAS Generator
+gcloud builds submit --config cloudbuild-sas-generator.yaml
+
+# Deploy Ops Frontend
+gcloud builds submit --config cloudbuild-ops-frontend.yaml
+
 # Deploy main app with Datadog sidecar (recommended)
 gcloud run services replace infra/cloudrun/service-with-sidecar.yaml --region us-central1
 ```
@@ -277,8 +295,12 @@ gcloud run services replace infra/cloudrun/service-with-sidecar.yaml --region us
 
 **AI Partner Catalyst: Accelerate Innovation** - Datadog LLM Observability Challenge
 
-### Hosted Application
-- **URL**: https://ops-assistant-118887195862.us-central1.run.app
+### Hosted Applications
+| Application | URL |
+|-------------|-----|
+| Ops Assistant API | https://ops-assistant-i4ney2dwya-uc.a.run.app |
+| Ops Assistant Frontend | https://ops-assistant-frontend-i4ney2dwya-uc.a.run.app |
+| SAS Query Generator | https://sas-query-generator-i4ney2dwya-uc.a.run.app |
 
 ### Datadog Organisation
 - **Organisation Name**: AI Singapore
