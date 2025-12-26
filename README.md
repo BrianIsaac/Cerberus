@@ -1,79 +1,66 @@
-# Ops Assistant: Self-Observing AI for Incident Triage
+# Ops Assistant: Scalable Multi-Agent Observability Platform
 
 **AI Partner Catalyst: Accelerate Innovation** — Datadog LLM Observability Challenge
 
-A production-grade observability solution demonstrating how AI agents can monitor themselves and each other. The Ops Assistant is a bounded, incident-ready AI agent that converts Datadog telemetry into actionable triage recommendations—while being fully observable through the same Datadog platform it queries.
+A production-grade observability framework for AI agents using Datadog. Any new agent can be onboarded with standardised telemetry, automatic dashboard inclusion, and template-based monitors/SLOs—while being fully observable through the same Datadog platform it queries.
 
-## The Innovation: Self-Referential AI Observability
+## The Innovation: Fleet-Wide AI Agent Observability
 
-What sets this solution apart is the **closed-loop observability architecture**:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         DATADOG OBSERVABILITY PLATFORM                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │  Dashboard  │  │   Monitors  │  │    SLOs     │  │ Incident Management │ │
-│  │  (7 groups) │  │ (8 rules)   │  │ (4 targets) │  │   (Auto-created)    │ │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘ │
-│         │                │                │                     │            │
-│         └────────────────┴────────────────┴─────────────────────┘            │
-│                                    ▲                                         │
-│                                    │ Telemetry                               │
-│                                    │                                         │
-│  ┌─────────────────────────────────┴─────────────────────────────────────┐  │
-│  │                        OPS ASSISTANT AI AGENT                          │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐  │  │
-│  │  │   Intake    │→ │   Collect   │→ │  Synthesis  │→ │   Approval   │  │  │
-│  │  │  (Gemini)   │  │ (MCP Tools) │  │  (Gemini)   │  │   (Human)    │  │  │
-│  │  └─────────────┘  └──────┬──────┘  └─────────────┘  └──────────────┘  │  │
-│  │                          │                                             │  │
-│  │                          ▼ Queries                                     │  │
-│  │                   ┌─────────────────┐                                  │  │
-│  │                   │  Datadog APIs   │ ◄── The agent queries the same   │  │
-│  │                   │  (via MCP)      │     platform that monitors it    │  │
-│  │                   └─────────────────┘                                  │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
-**The agent can see its own health metrics, latency, and error rates**—enabling meta-level incident response where the AI can help debug issues with itself.
-
-## Scalable Multi-Agent Architecture
-
-The solution is designed for horizontal scaling with multiple specialised AI agents:
+What sets this solution apart is the **scalable, self-referential observability architecture**:
 
 ```
-                              ┌─────────────────────────────┐
-                              │    DATADOG DASHBOARD        │
-                              │  Unified view of all agents │
-                              └──────────────┬──────────────┘
-                                             │
-              ┌──────────────────────────────┼──────────────────────────────┐
-              │                              │                              │
-              ▼                              ▼                              ▼
-   ┌─────────────────────┐      ┌─────────────────────┐      ┌─────────────────────┐
-   │   OPS ASSISTANT     │      │   SAS GENERATOR     │      │   FUTURE AGENTS     │
-   │   (Incident Triage) │      │   (Code Generation) │      │   (Extensible)      │
-   │                     │      │                     │      │                     │
-   │   • 8-node workflow │      │   • Single-shot LLM │      │   • Same patterns   │
-   │   • Human approval  │      │   • User feedback   │      │   • Shared MCP      │
-   │   • Bounded autonomy│      │   • Quality scoring │      │   • Common metrics  │
-   └──────────┬──────────┘      └──────────┬──────────┘      └──────────┬──────────┘
-              │                            │                            │
-              └────────────────────────────┼────────────────────────────┘
-                                           │
-                                           ▼
-                              ┌─────────────────────────────┐
-                              │      MCP TOOL SERVERS       │
-                              │  Shared tooling infrastructure│
-                              └─────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                          DATADOG OBSERVABILITY PLATFORM                           │
+│                                                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │                    AI Agent Fleet Health Dashboard                          │  │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐   │  │
+│  │  │Fleet Overview│ │  App Health  │ │  Governance  │ │ Quality Evals    │   │  │
+│  │  │ (all agents) │ │  (per svc)   │ │  (budgets)   │ │ (RAGAS scores)   │   │  │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └──────────────────┘   │  │
+│  └────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                   │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────────────────────┐  │
+│  │ 9 Fleet Monitors│  │   4 Fleet SLOs  │  │    Incident Management           │  │
+│  │ team:ai-agents  │  │ (Avail/Latency/ │  │    (Auto-created from monitors)  │  │
+│  │ by {service}    │  │  Govern/Quality)│  │                                  │  │
+│  └────────┬────────┘  └────────┬────────┘  └────────────────┬─────────────────┘  │
+│           │                    │                             │                    │
+│           └────────────────────┴─────────────────────────────┘                    │
+│                                    ▲                                              │
+│                                    │ Telemetry (ai_agent.* metrics)               │
+│                                    │                                              │
+│  ┌─────────────────────────────────┴──────────────────────────────────────────┐  │
+│  │                      SHARED OBSERVABILITY MODULE                            │  │
+│  │                      shared/observability/                                  │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │  │
+│  │  │  constants   │  │   metrics    │  │  decorators  │  │  build_tags  │    │  │
+│  │  │ (ai_agent.*) │  │ (emit_*)     │  │(@observed_*) │  │(team:ai-agents)│   │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘    │  │
+│  └─────────────────────────────────────────────────────────────────────────────┘  │
+│                                    ▲                                              │
+│        ┌───────────────────────────┼───────────────────────────┐                  │
+│        │                           │                           │                  │
+│        ▼                           ▼                           ▼                  │
+│  ┌───────────────┐         ┌───────────────┐         ┌───────────────┐           │
+│  │ OPS ASSISTANT │         │ SAS GENERATOR │         │ FUTURE AGENTS │           │
+│  │   (triage)    │         │(code-generation)│        │  (onboard via │           │
+│  │               │         │               │         │    script)    │           │
+│  │ service:      │         │ service:      │         │ service:      │           │
+│  │ ops-assistant │         │ sas-generator │         │ my-new-agent  │           │
+│  └───────┬───────┘         └───────┬───────┘         └───────┬───────┘           │
+│          │                         │                         │                    │
+│          └─────────────────────────┼─────────────────────────┘                    │
+│                                    │                                              │
+│                                    ▼                                              │
+│                         ┌─────────────────────┐                                   │
+│                         │   MCP TOOL SERVERS  │                                   │
+│                         │  (Datadog APIs, SAS)│                                   │
+│                         └─────────────────────┘                                   │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Each agent:
-- Emits standardised telemetry (APM traces, LLM Obs spans, custom metrics)
-- Shares the same MCP tool infrastructure
-- Appears in the unified dashboard with service-level filtering
-- Can be added without modifying existing agents
+**Key innovation:** All agents share the `team:ai-agents` tag, enabling fleet-wide monitoring while `service:<name>` allows per-agent drill-down. The shared observability module ensures consistent telemetry across all agents.
 
 ## Hard Requirements Checklist
 
@@ -81,9 +68,9 @@ Each agent:
 |-------------|----------------|
 | **Vertex AI / Gemini** | Google Gemini 2.0 Flash via Vertex AI |
 | **Telemetry to Datadog** | APM, LLM Observability, Logs, Custom Metrics |
-| **3+ Detection Rules** | 8 monitors with incident automation |
+| **3+ Detection Rules** | 9 monitors with incident automation |
 | **Actionable Records** | Auto-created incidents with context, runbooks, and signal data |
-| **In-Datadog View** | 7-section dashboard with health, SLOs, and actionable items |
+| **In-Datadog View** | 7-section dashboard with fleet overview and service filtering |
 | **Traffic Generator** | 8-mode script demonstrating all detection rules |
 
 ## Hosted Applications
@@ -103,10 +90,10 @@ Each agent:
 
 | Resource | Link |
 |----------|------|
+| **Dashboard** | https://ap1.datadoghq.com/dashboard/k3b-pcm-45c |
 | **LLM Obs Traces** | https://ap1.datadoghq.com/llm/traces?query=%40ml_app%3Aops-assistant |
-| **Dashboard** | https://ap1.datadoghq.com/dashboard/vy8-sk9-yxg |
-| **Monitors** | https://ap1.datadoghq.com/monitors/manage?q=service%3Aops-assistant |
-| **SLOs** | https://ap1.datadoghq.com/slo/manage |
+| **Monitors** | https://ap1.datadoghq.com/monitors/manage?q=team%3Aai-agents |
+| **SLOs** | https://ap1.datadoghq.com/slo?query=team%3Aai-agents |
 
 ## Observability Strategy
 
@@ -114,38 +101,75 @@ Each agent:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Layer 1: APM Tracing                                            │
+│ Layer 1: APM Tracing (Auto-instrumented via ddtrace)            │
 │ • Full request traces with span hierarchy                       │
 │ • Service map and dependency visualisation                      │
 │ • Latency breakdown by component                                │
 ├─────────────────────────────────────────────────────────────────┤
-│ Layer 2: LLM Observability                                      │
+│ Layer 2: LLM Observability (Decorator-based)                    │
 │ • Workflow → Agent → Tool span hierarchy                        │
 │ • Input/output capture for debugging                            │
 │ • Token usage and cost tracking                                 │
 │ • RAGAS quality evaluations (faithfulness, relevancy)           │
 ├─────────────────────────────────────────────────────────────────┤
-│ Layer 3: Custom Metrics                                         │
+│ Layer 3: Custom Metrics (DogStatsD via shared module)           │
+│ • Standardised ai_agent.* metric prefix                         │
+│ • Fleet tag: team:ai-agents (all agents)                        │
+│ • Service tag: service:<name> (per-agent filtering)             │
 │ • Governance metrics (steps, tool calls, model calls)           │
 │ • Quality scores (confidence, hallucination rate)               │
-│ • Security events (PII detection, prompt injection)             │
-│ • Business metrics (escalations, approvals, feedback)           │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Shared Observability Module
+
+All agents use the `shared/observability/` module for consistent telemetry:
+
+```python
+from shared.observability import (
+    emit_request_complete,
+    emit_tool_error,
+    emit_quality_score,
+    timed_request,
+    observed_workflow,
+    TEAM_AI_AGENTS,
+)
+
+# Automatic metric emission with correct tags
+with timed_request("my-agent", "my-type") as metrics:
+    result = await do_work()
+    metrics["llm_calls"] = 1
+```
+
+### Standard Metrics
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ai_agent.request.count` | Counter | Total requests |
+| `ai_agent.request.latency` | Histogram | End-to-end latency (ms) |
+| `ai_agent.request.error` | Counter | Failed requests |
+| `ai_agent.llm.calls` | Counter | LLM invocations |
+| `ai_agent.tool.calls` | Counter | Tool invocations |
+| `ai_agent.tool.errors` | Counter | Tool failures |
+| `ai_agent.quality.score` | Gauge | Quality evaluation score (0-1) |
+| `ai_agent.step_budget_exceeded` | Counter | Runaway agent events |
+| `ai_agent.handoff_required` | Counter | Human escalation events |
 
 ### Dashboard (7 Widget Groups)
 
 | Section | Signals Monitored |
 |---------|-------------------|
+| **Fleet Overview** | Active agents, request volume by service, error rate by service |
 | **Application Health** | Request volume, P95 latency, error rate, Gemini LLM latency |
 | **Governance & Autonomy** | LLM calls, workflow executions, step budgets, tool limits |
 | **MCP Tools Performance** | Tool invocations, latency (avg/P95), error rate, Apdex score |
 | **Quality Evaluations** | RAGAS faithfulness/relevancy, confidence scores, hallucination rate |
 | **Operations** | Monitor status panel, incidents/cases, worst traces |
 | **SAS Query Generator** | Query volume, generation latency, user feedback, error rate |
-| **Ops Assistant Frontend** | Request volume, latency, backend connectivity, sessions |
 
-### Detection Rules (8 Monitors)
+### Detection Rules (9 Monitors)
+
+All monitors use `team:ai-agents by {service}` for fleet-wide coverage with per-agent alerting:
 
 | Monitor | Threshold | Severity | Rationale |
 |---------|-----------|----------|-----------|
@@ -157,6 +181,7 @@ Each agent:
 | **PII Detection Alert** | any PII detected | P1 | Data privacy violation |
 | **MCP Server Connection Issues** | >5 errors | P1 | Infrastructure failure |
 | **Token Budget Spike** | >50k tokens | P3 | Cost anomaly detection |
+| **LLM Error Rate Spike** | >5% | P2 | Service reliability issues |
 
 **Each monitor automatically creates an incident with:**
 - Signal data (metric values, timestamps, affected services)
@@ -164,7 +189,7 @@ Each agent:
 - Context tags for filtering and correlation
 - Severity-based notification routing
 
-### SLOs (4 Targets)
+### SLOs (4 Fleet-Wide Targets)
 
 | SLO | Target (30d) | Target (7d) | Error Budget |
 |-----|--------------|-------------|--------------|
@@ -179,11 +204,11 @@ Rather than treating governance as an afterthought, this solution treats **gover
 
 | Control | Limit | Observable As |
 |---------|-------|---------------|
-| Max Agent Steps | 8 (hard cap: 10) | `ops_assistant.agent.steps` gauge |
-| Max Model Calls | 5 | `ops_assistant.model.calls` counter |
-| Max Tool Calls | 6 | `ops_assistant.tool.calls` counter |
-| Confidence Threshold | 0.7 | `ops_assistant.synthesis.confidence` gauge |
-| Human Approval | Required for incidents | `ops_assistant.approval.*` metrics |
+| Max Agent Steps | 8 (hard cap: 10) | `ai_agent.step_budget_exceeded` |
+| Max Model Calls | 5 | `ai_agent.llm.calls` counter |
+| Max Tool Calls | 6 | `ai_agent.tool.calls` counter |
+| Confidence Threshold | 0.7 | Quality evaluation scores |
+| Human Approval | Required for incidents | `ai_agent.handoff_required` |
 
 This makes AI agent behaviour **predictable, debuggable, and continuously improvable** through standard SRE practices.
 
@@ -325,10 +350,60 @@ uv run python scripts/traffic_gen.py --mode all --rps 0.5 --duration 120
 | `tool_error` | Non-existent services | Tool Error Rate Spike |
 | `mcp_health` | Invalid tool calls | MCP Connection Issues |
 
+## Onboarding New Agents
+
+To add a new AI agent to the platform, use the automated onboarding script:
+
+```bash
+python scripts/onboard_agent.py \
+    --service my-new-agent \
+    --agent-type research \
+    --create-monitors \
+    --create-slos
+```
+
+This will:
+1. Add your service to the dashboard template variables
+2. Generate monitor configurations (7 types)
+3. Generate SLO configurations (6 types)
+4. Provide deployment instructions
+
+For detailed integration instructions, see [AGENT_ONBOARDING.md](AGENT_ONBOARDING.md).
+
+### Factory Scripts
+
+Generate individual configurations:
+
+```bash
+# List available monitor types
+python scripts/create_monitor.py --list-types
+
+# Create specific monitor
+python scripts/create_monitor.py --service my-agent --type latency
+
+# Create all monitors for a service
+python scripts/create_monitor.py --service my-agent --all -o monitors-my-agent.json
+
+# List available SLO types
+python scripts/create_slo.py --list-types
+
+# Create fleet-wide SLO config
+python scripts/create_slo.py --fleet-config
+```
+
 ## Project Structure
 
 ```
 ops-assistant/
+├── AGENT_ONBOARDING.md         # Step-by-step agent onboarding guide
+│
+├── shared/                     # Shared utilities across all agents
+│   └── observability/          # Standardised telemetry module
+│       ├── __init__.py         # Public API exports
+│       ├── constants.py        # ai_agent.* metrics, team:ai-agents tag
+│       ├── metrics.py          # emit_* functions, timed_request
+│       └── decorators.py       # @observed_workflow decorator
+│
 ├── ops_triage_agent/           # Backend API for incident triage
 │   ├── main.py                 # FastAPI application with /ask, /triage, /review
 │   ├── config.py               # Pydantic settings management
@@ -354,20 +429,24 @@ ops-assistant/
 │       └── dashboards.py       # Dashboard listing
 │
 ├── ops_assistant_frontend/     # Streamlit chat UI
-├── sas_generator/              # SAS code generation demo
-├── sas_mcp_server/             # SAS data tools
+├── sas_generator/              # SAS code generation agent
+├── sas_mcp_server/             # SAS data tools MCP server
 │
 ├── scripts/
-│   └── traffic_gen.py          # 8-mode traffic generator
+│   ├── onboard_agent.py        # Automated agent onboarding
+│   ├── create_monitor.py       # Monitor configuration factory (7 types)
+│   ├── create_slo.py           # SLO configuration factory (6 types)
+│   ├── traffic_gen.py          # 8-mode traffic generator
+│   └── test_shared_observability.py  # Metric submission test
 │
 ├── infra/
 │   ├── cloudrun/               # Cloud Run deployment configs
 │   │   ├── service-with-sidecar.yaml  # Datadog Agent sidecar
 │   │   └── deploy.sh           # Deployment scripts
 │   └── datadog/                # Datadog configuration
-│       ├── dashboard.json      # 7-section dashboard
-│       ├── monitors.json       # 8 detection rules
-│       ├── slos.json           # 4 SLO definitions
+│       ├── dashboard.json      # 7-section unified dashboard
+│       ├── monitors.json       # 9 fleet-wide detection rules
+│       ├── slos.json           # 4 fleet-wide SLO definitions
 │       └── apply_config.sh     # Configuration deployment
 │
 ├── submission/                 # Hackathon submission artifacts
@@ -426,42 +505,14 @@ curl -X POST https://ops-assistant-i4ney2dwya-uc.a.run.app/ask \
 }
 ```
 
-## Extending with New Agents
-
-To add a new AI agent to the platform:
-
-1. **Create agent module** following the pattern in `ops_triage_agent/` or `sas_generator/`
-
-2. **Implement observability** using the shared patterns:
-   ```python
-   from ddtrace.llmobs import LLMObs
-   from ddtrace.llmobs.decorators import workflow, agent, llm
-
-   @workflow
-   def my_agent_workflow(request):
-       # Your agent logic
-       pass
-   ```
-
-3. **Emit standard metrics**:
-   ```python
-   statsd.gauge("my_agent.steps", step_count, tags=["service:my-agent"])
-   ```
-
-4. **Add to dashboard** by extending the service filter variable
-
-5. **Deploy** using the existing Cloud Build patterns
-
-The dashboard automatically aggregates metrics from all agents tagged with the appropriate service name.
-
 ## Submission Artifacts
 
 All required Datadog configuration exports are in `submission/`:
 
 | File | Contents |
 |------|----------|
-| `dashboard.json` | 7-section dashboard with multi-service filtering |
-| `monitors.json` | 8 detection rules with incident automation |
+| `dashboard.json` | 7-section dashboard with fleet overview and multi-service filtering |
+| `monitors.json` | 9 detection rules with incident automation |
 | `slos.json` | 4 SLO definitions (availability, latency, governance, quality) |
 | `screenshots/` | Evidence of functioning observability |
 
@@ -483,6 +534,8 @@ Topics covered:
 | **LLM Obs + Custom Metrics** | Combined auto-instrumentation with manual DogStatsD emission |
 | **Service-to-service auth** | GCP identity tokens for internal Cloud Run communication |
 | **Bounded autonomy tracking** | Governance metrics as first-class observability signals |
+| **Multi-agent consistency** | Shared observability module with standardised metrics/tags |
+| **SLO tag indexing** | Use `service:` tag (indexed) instead of custom `team:` tag for SLO queries |
 
 ## License
 
