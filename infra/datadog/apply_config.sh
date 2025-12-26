@@ -105,6 +105,32 @@ create_dashboard() {
     fi
 }
 
+update_dashboard() {
+    local dashboard_id="${1:-k3b-pcm-45c}"
+    log_info "Updating dashboard ${dashboard_id}..."
+
+    local response
+    response=$(curl -s -w "\n%{http_code}" -X PUT "https://api.${DD_SITE}/api/v1/dashboard/${dashboard_id}" \
+        -H "Content-Type: application/json" \
+        -H "DD-API-KEY: ${DD_API_KEY}" \
+        -H "DD-APPLICATION-KEY: ${DD_APP_KEY}" \
+        -d @"${SCRIPT_DIR}/dashboard.json")
+
+    local http_code
+    http_code=$(echo "$response" | tail -n1)
+    local body
+    body=$(echo "$response" | sed '$d')
+
+    if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+        log_info "Dashboard updated successfully. ID: ${dashboard_id}"
+        log_info "View at: https://${DD_SITE}/dashboard/${dashboard_id}"
+    else
+        log_error "Failed to update dashboard. HTTP ${http_code}"
+        log_error "Response: ${body}"
+        return 1
+    fi
+}
+
 create_monitors() {
     log_info "Creating monitors..."
 
@@ -257,6 +283,10 @@ case "${1:-}" in
     dashboard)
         check_requirements
         create_dashboard
+        ;;
+    update-dashboard)
+        check_requirements
+        update_dashboard "${2:-k3b-pcm-45c}"
         ;;
     monitors)
         check_requirements

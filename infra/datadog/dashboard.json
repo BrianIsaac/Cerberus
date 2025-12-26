@@ -1,7 +1,75 @@
 {
-  "title": "Ops Assistant Health",
-  "description": "Comprehensive health dashboard for Ops Assistant with throughput, latency, errors, autonomy, quality, and outcome metrics. Supports multi-service filtering via template variables.",
+  "title": "AI Agent Fleet Health",
+  "description": "Unified health dashboard for all AI agents. Use service filter to drill down to specific agents. All agents are tagged with team:ai-agents for fleet-wide visibility.",
   "widgets": [
+    {
+      "id": 100,
+      "definition": {
+        "type": "group",
+        "title": "Fleet Overview",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 101,
+            "definition": {
+              "type": "query_value",
+              "title": "Total Agents Active",
+              "requests": [
+                {
+                  "q": "count_not_null(sum:trace.http.request.hits{team:ai-agents,$env} by {service})",
+                  "aggregator": "last"
+                }
+              ]
+            }
+          },
+          {
+            "id": 102,
+            "definition": {
+              "type": "toplist",
+              "title": "Request Volume by Agent",
+              "requests": [
+                {
+                  "q": "sum:trace.http.request.hits{team:ai-agents,$env} by {service}.as_count()",
+                  "style": {
+                    "palette": "dog_classic"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 103,
+            "definition": {
+              "type": "toplist",
+              "title": "Error Rate by Agent (%)",
+              "requests": [
+                {
+                  "q": "sum:trace.http.request.errors{team:ai-agents,$env} by {service}.as_count() / sum:trace.http.request.hits{team:ai-agents,$env} by {service}.as_count() * 100",
+                  "style": {
+                    "palette": "warm"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 104,
+            "definition": {
+              "type": "toplist",
+              "title": "P95 Latency by Agent (s)",
+              "requests": [
+                {
+                  "q": "p95:trace.http.request.duration{team:ai-agents,$env} by {service}",
+                  "style": {
+                    "palette": "cool"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
     {
       "id": 0,
       "definition": {
@@ -434,45 +502,9 @@
       "id": 60,
       "definition": {
         "type": "group",
-        "title": "SAS Query Generator",
+        "title": "SAS Generator Metrics",
         "layout_type": "ordered",
         "widgets": [
-          {
-            "id": 61,
-            "definition": {
-              "type": "timeseries",
-              "title": "Query Generation Volume",
-              "requests": [
-                {
-                  "q": "sum:trace.google_genai.request.hits{service:sas-query-generator,$env}.as_count()",
-                  "display_type": "bars",
-                  "style": {
-                    "palette": "dog_classic"
-                  }
-                }
-              ]
-            }
-          },
-          {
-            "id": 62,
-            "definition": {
-              "type": "timeseries",
-              "title": "Generation Latency (P95)",
-              "requests": [
-                {
-                  "q": "p95:trace.google_genai.request{service:sas-query-generator,$env}",
-                  "display_type": "line"
-                }
-              ],
-              "markers": [
-                {
-                  "value": "y = 5",
-                  "display_type": "error dashed",
-                  "label": "SLO (5s)"
-                }
-              ]
-            }
-          },
           {
             "id": 63,
             "definition": {
@@ -527,89 +559,25 @@
               ],
               "precision": 1
             }
-          }
-        ]
-      }
-    },
-    {
-      "id": 70,
-      "definition": {
-        "type": "group",
-        "title": "Ops Assistant Frontend",
-        "layout_type": "ordered",
-        "widgets": [
+          },
           {
-            "id": 71,
+            "id": 65,
             "definition": {
               "type": "timeseries",
-              "title": "Frontend Request Volume",
+              "title": "Feedback Trend",
               "requests": [
                 {
-                  "q": "sum:trace.http.request.hits{service:ops-assistant-frontend,$env}.as_count()",
+                  "q": "sum:sas_generator.feedback.positive{$env}.as_count()",
                   "display_type": "bars",
                   "style": {
-                    "palette": "dog_classic"
+                    "palette": "green"
                   }
-                }
-              ]
-            }
-          },
-          {
-            "id": 72,
-            "definition": {
-              "type": "timeseries",
-              "title": "Frontend API Latency (P95)",
-              "requests": [
+                },
                 {
-                  "q": "p95:trace.http.request.duration{service:ops-assistant-frontend,$env}",
-                  "display_type": "line"
-                }
-              ],
-              "markers": [
-                {
-                  "value": "y = 30",
-                  "display_type": "error dashed",
-                  "label": "SLO (30s)"
-                }
-              ]
-            }
-          },
-          {
-            "id": 73,
-            "definition": {
-              "type": "query_value",
-              "title": "Frontend Error Rate (%)",
-              "requests": [
-                {
-                  "q": "sum:trace.http.request.errors{service:ops-assistant-frontend,$env}.as_count() / sum:trace.http.request.hits{service:ops-assistant-frontend,$env}.as_count() * 100",
-                  "conditional_formats": [
-                    {
-                      "comparator": ">",
-                      "value": 5,
-                      "palette": "white_on_red"
-                    },
-                    {
-                      "comparator": "<=",
-                      "value": 5,
-                      "palette": "white_on_green"
-                    }
-                  ]
-                }
-              ],
-              "precision": 1
-            }
-          },
-          {
-            "id": 74,
-            "definition": {
-              "type": "timeseries",
-              "title": "Backend API Calls",
-              "requests": [
-                {
-                  "q": "sum:trace.httpx.request.hits{service:ops-assistant-frontend,$env}.as_count()",
+                  "q": "sum:sas_generator.feedback.negative{$env}.as_count()",
                   "display_type": "bars",
                   "style": {
-                    "palette": "cool"
+                    "palette": "red"
                   }
                 }
               ]
@@ -633,9 +601,14 @@
       "prefix": "service",
       "available_values": [
         "ops-assistant",
-        "sas-query-generator",
-        "ops-assistant-frontend"
+        "sas-generator"
       ]
+    },
+    {
+      "name": "team",
+      "default": "ai-agents",
+      "prefix": "team",
+      "available_values": ["ai-agents"]
     },
     {
       "name": "ml_app",
@@ -643,8 +616,7 @@
       "prefix": "ml_app",
       "available_values": [
         "ops-assistant",
-        "sas-query-generator",
-        "ops-assistant-frontend"
+        "sas-generator"
       ]
     }
   ]
