@@ -312,8 +312,8 @@ docker run -p 8502:8080 -e SAS_API_URL=http://host.docker.internal:8082 sas-gene
 ### Deploy to Cloud Run
 
 ```bash
-# Deploy MCP server
-gcloud builds submit --config cloudbuild-mcp.yaml
+# Deploy Ops Assistant MCP server
+gcloud builds submit --config cloudbuild-ops-mcp.yaml
 
 # Deploy Ops Assistant API with Datadog sidecar
 gcloud run services replace infra/cloudrun/service-with-sidecar.yaml --region us-central1
