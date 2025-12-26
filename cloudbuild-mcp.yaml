@@ -54,6 +54,10 @@ steps:
       - '--max-instances=5'
       - '--min-instances=1'
       - '--set-env-vars=DD_SITE=${_DD_SITE}'
+      - '--set-env-vars=DD_SERVICE=${_SERVICE_NAME}'
+      - '--set-env-vars=DD_ENV=production'
+      - '--set-env-vars=DD_TAGS=team:ai-agents'
+      - '--set-env-vars=DD_TRACE_GLOBAL_TAGS=team:ai-agents'
       - '--set-secrets=DD_API_KEY=DD_API_KEY:latest,DD_APP_KEY=DD_APP_KEY:latest'
 
   # Create GitHub deployment

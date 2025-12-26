@@ -63,6 +63,10 @@ spec:
               value: production
             - name: DD_VERSION
               value: "1.0.0"
+            - name: DD_TAGS
+              value: "team:ai-agents"
+            - name: DD_TRACE_GLOBAL_TAGS
+              value: "team:ai-agents"
             - name: DD_SITE
               value: ap1.datadoghq.com
             # LLM Observability (agentless - separate from APM)
@@ -144,6 +148,8 @@ spec:
               value: production
             - name: DD_VERSION
               value: "1.0.0"
+            - name: DD_TAGS
+              value: "team:ai-agents"
             # Enable APM
             - name: DD_APM_ENABLED
               value: "true"
