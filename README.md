@@ -467,7 +467,7 @@ ops-assistant/
 │   ├── slos.json               # SLOs export
 │   └── screenshots/            # Evidence screenshots
 │
-├── Dockerfile-*                # Container definitions (7 total)
+├── Dockerfile-*                # Container definitions (6 total)
 ├── cloudbuild-*.yaml           # Cloud Build configs (5 total)
 └── pyproject.toml              # Project dependencies (uv)
 ```
