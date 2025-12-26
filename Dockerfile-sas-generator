@@ -56,6 +56,7 @@ WORKDIR ${REPO_DIR}
 COPY --from=build --chown=${NON_ROOT_USER}:${NON_ROOT_GID} ${REPO_DIR} ${REPO_DIR}
 
 COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} sas_generator/ sas_generator/
+COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} shared/ shared/
 
 EXPOSE 8080
 

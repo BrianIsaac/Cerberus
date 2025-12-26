@@ -16,7 +16,7 @@
               "title": "Total Agents Active",
               "requests": [
                 {
-                  "q": "count_not_null(sum:trace.http.request.hits{team:ai-agents,$env} by {service})",
+                  "q": "count_not_null(sum:ai_agents.fleet.requests{$env} by {service})",
                   "aggregator": "last"
                 }
               ]
@@ -29,7 +29,7 @@
               "title": "Request Volume by Agent",
               "requests": [
                 {
-                  "q": "sum:trace.http.request.hits{team:ai-agents,$env} by {service}.as_count()",
+                  "q": "sum:ai_agents.fleet.requests{$env} by {service}",
                   "style": {
                     "palette": "dog_classic"
                   }
@@ -44,7 +44,7 @@
               "title": "Error Rate by Agent (%)",
               "requests": [
                 {
-                  "q": "sum:trace.http.request.errors{team:ai-agents,$env} by {service}.as_count() / sum:trace.http.request.hits{team:ai-agents,$env} by {service}.as_count() * 100",
+                  "q": "sum:trace.http.request.errors{$service,$env}.as_count() / sum:trace.http.request.hits{$service,$env}.as_count() * 100",
                   "style": {
                     "palette": "warm"
                   }
@@ -59,7 +59,7 @@
               "title": "P95 Latency by Agent (s)",
               "requests": [
                 {
-                  "q": "p95:trace.http.request.duration{team:ai-agents,$env} by {service}",
+                  "q": "p95:trace.http.request.duration{$service,$env} by {service}",
                   "style": {
                     "palette": "cool"
                   }

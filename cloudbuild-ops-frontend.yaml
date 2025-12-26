@@ -56,6 +56,7 @@ steps:
           --region=${_REGION} \
           --platform=managed \
           --allow-unauthenticated \
+          --labels=team=ai-agents \
           --memory=2Gi \
           --cpu=2 \
           --timeout=3600 \

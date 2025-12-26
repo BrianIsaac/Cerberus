@@ -1,17 +1,17 @@
-# Cloud Build config for SAS Query Generator Streamlit app
-# Trigger: Push to main with changes in sas_generator/** or Dockerfile-sas-generator
+# Cloud Build config for SAS Query Generator Streamlit UI
+# Trigger: Push to main with changes in sas_generator/app.py or Dockerfile-sas-generator-ui
 #
 # Required substitutions (set in trigger or via --substitutions):
 #   _REGION: Cloud Run region (default: us-central1)
-#   _DD_SITE: Datadog site (default: ap1.datadoghq.com)
 #
 # Prerequisites:
-#   - Secrets must exist in Secret Manager: DD_API_KEY
+#   - sas-generator-api must be deployed first
+#   - IAM binding must be configured for service-to-service auth
 
 substitutions:
   _REGION: us-central1
-  _DD_SITE: ap1.datadoghq.com
   _SERVICE_NAME: sas-query-generator
+  _API_SERVICE_NAME: sas-generator-api
 
 steps:
   # Build the container image
@@ -23,7 +23,7 @@ steps:
       - '-t'
       - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
       - '-f'
-      - 'Dockerfile-sas-generator'
+      - 'Dockerfile-sas-generator-ui'
       - '.'
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -45,35 +45,27 @@ steps:
     args:
       - '-c'
       - |
+        # Get SAS Generator API URL
+        SAS_API_URL=$(gcloud run services describe ${_API_SERVICE_NAME} \
+          --region=${_REGION} \
+          --format='value(status.url)')
+
         gcloud run deploy ${_SERVICE_NAME} \
           --image=gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA \
           --region=${_REGION} \
           --platform=managed \
           --allow-unauthenticated \
-          --memory=2Gi \
-          --cpu=2 \
+          --labels=team=ai-agents \
+          --memory=1Gi \
+          --cpu=1 \
           --timeout=3600 \
           --concurrency=80 \
           --max-instances=10 \
           --min-instances=0 \
           --session-affinity \
           --cpu-boost \
-          --set-env-vars="DD_SERVICE=${_SERVICE_NAME}" \
-          --set-env-vars="DD_ENV=production" \
-          --set-env-vars="DD_VERSION=$COMMIT_SHA" \
-          --set-env-vars="DD_TAGS=team:ai-agents" \
-          --set-env-vars="DD_TRACE_GLOBAL_TAGS=team:ai-agents" \
-          --set-env-vars="DD_TRACE_ENABLED=true" \
-          --set-env-vars="DD_APM_ENABLED=true" \
-          --set-env-vars="DD_TRACE_AGENTLESS=true" \
-          --set-env-vars="DD_LLMOBS_ENABLED=1" \
-          --set-env-vars="DD_LLMOBS_ML_APP=${_SERVICE_NAME}" \
-          --set-env-vars="DD_LLMOBS_AGENTLESS_ENABLED=1" \
-          --set-env-vars="DD_SITE=${_DD_SITE}" \
-          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID" \
-          --set-env-vars="VERTEX_LOCATION=${_REGION}" \
-          --set-env-vars="GEMINI_MODEL=gemini-2.0-flash-exp" \
-          --set-secrets="DD_API_KEY=DD_API_KEY:latest"
+          --set-env-vars="SAS_API_URL=$${SAS_API_URL}" \
+          --set-env-vars="GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 
   # Create GitHub deployment
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -89,7 +81,7 @@ steps:
           -H "Authorization: token $$GITHUB_TOKEN" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${REPO_FULL_NAME}/deployments \
-          -d '{"ref":"'$COMMIT_SHA'","environment":"sas-generator","auto_merge":false,"required_contexts":[]}')
+          -d '{"ref":"'$COMMIT_SHA'","environment":"sas-generator-ui","auto_merge":false,"required_contexts":[]}')
 
         echo "Deploy response: $$DEPLOY_RESPONSE"
         DEPLOY_ID=$(echo "$$DEPLOY_RESPONSE" | jq -r '.id')

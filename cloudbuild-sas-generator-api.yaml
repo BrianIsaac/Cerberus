@@ -1,14 +1,15 @@
-# Cloud Build config for MCP server
-# Trigger: Push to main with changes in ops_triage_mcp_server/** or Dockerfile-ops-triage-mcp-server
+# Cloud Build config for SAS Generator API backend with Datadog sidecar
+# Trigger: Push to main with changes in sas_generator/** or Dockerfile-sas-generator-api
 #
 # Required substitutions (set in trigger or via --substitutions):
 #   _REGION: Cloud Run region (default: us-central1)
-#   _DD_SITE: Datadog site (default: ap1.datadoghq.com)
+#
+# Prerequisites:
+#   - Secrets must exist in Secret Manager: DD_API_KEY
 
 substitutions:
   _REGION: us-central1
-  _DD_SITE: ap1.datadoghq.com
-  _SERVICE_NAME: datadog-mcp-server
+  _SERVICE_NAME: sas-generator-api
 
 steps:
   # Build the container image
@@ -20,7 +21,7 @@ steps:
       - '-t'
       - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
       - '-f'
-      - 'Dockerfile-ops-triage-mcp-server'
+      - 'Dockerfile-sas-generator-api'
       - '.'
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -36,30 +37,29 @@ steps:
       - 'push'
       - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
 
-  # Deploy to Cloud Run
+  # Update sidecar YAML with commit SHA and deploy
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - 'run'
-      - 'deploy'
-      - '${_SERVICE_NAME}'
-      - '--image=gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
-      - '--region=${_REGION}'
-      - '--platform=managed'
-      - '--no-allow-unauthenticated'
-      - '--labels=team=ai-agents'
-      - '--memory=512Mi'
-      - '--cpu=1'
-      - '--timeout=60'
-      - '--concurrency=50'
-      - '--max-instances=5'
-      - '--min-instances=1'
-      - '--set-env-vars=DD_SITE=${_DD_SITE}'
-      - '--set-env-vars=DD_SERVICE=${_SERVICE_NAME}'
-      - '--set-env-vars=DD_ENV=production'
-      - '--set-env-vars=DD_TAGS=team:ai-agents'
-      - '--set-env-vars=DD_TRACE_GLOBAL_TAGS=team:ai-agents'
-      - '--set-secrets=DD_API_KEY=DD_API_KEY:latest,DD_APP_KEY=DD_APP_KEY:latest'
+      - '-c'
+      - |
+        # Update the image tag in the sidecar YAML
+        sed -i "s|gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest|gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA|g" \
+          infra/cloudrun/sas-generator-api-sidecar.yaml
+
+        # Update version tag
+        sed -i "s|value: \"1.0.0\"|value: \"$COMMIT_SHA\"|g" \
+          infra/cloudrun/sas-generator-api-sidecar.yaml
+
+        # Deploy using Cloud Run services replace (supports multi-container)
+        gcloud run services replace infra/cloudrun/sas-generator-api-sidecar.yaml \
+          --region=${_REGION}
+
+        # Allow unauthenticated access (public API like ops-assistant)
+        gcloud run services add-iam-policy-binding ${_SERVICE_NAME} \
+          --region=${_REGION} \
+          --member="allUsers" \
+          --role="roles/run.invoker" || true
 
   # Create GitHub deployment
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -75,7 +75,7 @@ steps:
           -H "Authorization: token $$GITHUB_TOKEN" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${REPO_FULL_NAME}/deployments \
-          -d '{"ref":"'$COMMIT_SHA'","environment":"mcp-server","auto_merge":false,"required_contexts":[]}')
+          -d '{"ref":"'$COMMIT_SHA'","environment":"sas-generator-api","auto_merge":false,"required_contexts":[]}')
 
         echo "Deploy response: $$DEPLOY_RESPONSE"
         DEPLOY_ID=$(echo "$$DEPLOY_RESPONSE" | jq -r '.id')

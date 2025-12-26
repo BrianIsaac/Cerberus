@@ -1,5 +1,5 @@
-# Cloud Build config for MCP server
-# Trigger: Push to main with changes in ops_triage_mcp_server/** or Dockerfile-ops-triage-mcp-server
+# Cloud Build config for SAS MCP server
+# Trigger: Push to main with changes in sas_mcp_server/** or Dockerfile-sas-mcp-server
 #
 # Required substitutions (set in trigger or via --substitutions):
 #   _REGION: Cloud Run region (default: us-central1)
@@ -8,7 +8,7 @@
 substitutions:
   _REGION: us-central1
   _DD_SITE: ap1.datadoghq.com
-  _SERVICE_NAME: datadog-mcp-server
+  _SERVICE_NAME: sas-mcp-server
 
 steps:
   # Build the container image
@@ -20,7 +20,7 @@ steps:
       - '-t'
       - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
       - '-f'
-      - 'Dockerfile-ops-triage-mcp-server'
+      - 'Dockerfile-sas-mcp-server'
       - '.'
     env:
       - 'DOCKER_BUILDKIT=1'
@@ -59,7 +59,9 @@ steps:
       - '--set-env-vars=DD_ENV=production'
       - '--set-env-vars=DD_TAGS=team:ai-agents'
       - '--set-env-vars=DD_TRACE_GLOBAL_TAGS=team:ai-agents'
-      - '--set-secrets=DD_API_KEY=DD_API_KEY:latest,DD_APP_KEY=DD_APP_KEY:latest'
+      - '--set-env-vars=DD_TRACE_ENABLED=true'
+      - '--set-env-vars=DD_TRACE_AGENTLESS=true'
+      - '--set-secrets=DD_API_KEY=DD_API_KEY:latest'
 
   # Create GitHub deployment
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -75,7 +77,7 @@ steps:
           -H "Authorization: token $$GITHUB_TOKEN" \
           -H "Accept: application/vnd.github.v3+json" \
           https://api.github.com/repos/${REPO_FULL_NAME}/deployments \
-          -d '{"ref":"'$COMMIT_SHA'","environment":"mcp-server","auto_merge":false,"required_contexts":[]}')
+          -d '{"ref":"'$COMMIT_SHA'","environment":"sas-mcp-server","auto_merge":false,"required_contexts":[]}')
 
         echo "Deploy response: $$DEPLOY_RESPONSE"
         DEPLOY_ID=$(echo "$$DEPLOY_RESPONSE" | jq -r '.id')

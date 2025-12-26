@@ -12,14 +12,47 @@ The platform uses a three-layer telemetry architecture:
 
 All agents are tagged with `team:ai-agents` for fleet-wide aggregation.
 
+## Deployment Architecture
+
+Each agent follows a **multi-container architecture** on Cloud Run:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Cloud Run Service: my-agent-api                                    │
+│                                                                     │
+│  ┌─────────────────────────┐    ┌─────────────────────────────────┐│
+│  │ Backend API Container   │    │ Datadog Sidecar Container      ││
+│  │ (FastAPI + ddtrace-run) │───>│ (gcr.io/datadoghq/serverless-  ││
+│  │                         │    │  init:latest)                   ││
+│  │ - Agent logic           │    │                                 ││
+│  │ - LLM/MCP integration   │    │ - APM trace collection         ││
+│  │ - Metrics emission      │    │ - DogStatsD metrics            ││
+│  └─────────────────────────┘    └─────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  Cloud Run Service: my-agent-ui (Optional)                          │
+│                                                                     │
+│  ┌─────────────────────────┐                                       │
+│  │ Frontend UI Container   │──────> Calls Backend API via HTTP     │
+│  │ (Streamlit/Gradio)      │        with IAM authentication        │
+│  └─────────────────────────┘                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Required containers:**
+1. **Backend API** - FastAPI application with `ddtrace-run` instrumentation
+2. **Datadog Sidecar** - Collects APM traces and DogStatsD metrics
+3. **Frontend UI** (Optional) - Streamlit/Gradio UI that calls the backend
+
 ## Prerequisites
 
 Before onboarding a new agent, ensure:
 
 - [ ] Agent code is written and tested locally
-- [ ] Datadog API key (`DD_API_KEY`) is configured
-- [ ] DogStatsD is available (via Datadog Agent sidecar on Cloud Run)
-- [ ] Access to `infra/datadog/` directory for configuration updates
+- [ ] Datadog API key (`DD_API_KEY`) is in Secret Manager
+- [ ] Access to `infra/cloudrun/` directory for sidecar configuration
+- [ ] Access to `infra/datadog/` directory for dashboard updates
 
 ## Step 1: Add Dependencies
 
@@ -77,18 +110,28 @@ AGENT_TYPE = "my-agent-type"
 
 
 def setup_llm_observability() -> None:
-    """Initialise Datadog LLM Observability."""
+    """Initialise Datadog LLM Observability.
+
+    Uses sidecar mode by default (agentless_enabled=False).
+    The Datadog sidecar container handles trace/metric forwarding.
+    LLMObs still uses agentless for its specific telemetry.
+    """
+    agentless = os.environ.get("DD_LLMOBS_AGENTLESS_ENABLED", "0") == "1"
+
     LLMObs.enable(
-        ml_app=settings.dd_service,
-        api_key=settings.dd_api_key,
-        site=settings.dd_site,
-        agentless_enabled=True,
+        ml_app=settings.dd_llmobs_ml_app,
+        api_key=settings.dd_api_key if agentless else None,
+        site=settings.dd_site if agentless else None,
+        agentless_enabled=agentless,
         integrations_enabled=True,
     )
 
 
 def setup_custom_metrics() -> None:
-    """Initialise DogStatsD for custom metrics emission."""
+    """Initialise DogStatsD for custom metrics emission.
+
+    Connects to the Datadog sidecar container on localhost.
+    """
     dd_initialize(
         statsd_host=os.getenv("DD_AGENT_HOST", "localhost"),
         statsd_port=int(os.getenv("DD_DOGSTATSD_PORT", "8125")),
@@ -214,7 +257,245 @@ Workflow: my_agent_workflow
   └── LLM: call_llm (gemini-2.0-flash-exp)
 ```
 
-## Step 6: Add to Dashboard
+## Step 6: Create Deployment Configuration
+
+### 6a. Backend API Dockerfile
+
+Create `Dockerfile-my-agent-api`:
+
+```dockerfile
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS build
+
+WORKDIR /app
+ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PYTHON_DOWNLOADS=never
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-dev
+
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+
+WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH" PYTHONPATH="/app" PORT=8080
+
+COPY --from=build /app/.venv /app/.venv
+COPY my_agent/ my_agent/
+COPY shared/ shared/
+
+EXPOSE 8080
+
+# Use ddtrace-run for APM instrumentation
+ENTRYPOINT ["ddtrace-run"]
+CMD ["uvicorn", "my_agent.main:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+### 6b. Frontend UI Dockerfile (Optional)
+
+Create `Dockerfile-my-agent-ui`:
+
+```dockerfile
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS build
+
+WORKDIR /app
+ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PYTHON_DOWNLOADS=never
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-dev
+
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
+
+WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH" PYTHONPATH="/app" PORT=8080
+
+COPY --from=build /app/.venv /app/.venv
+COPY my_agent/ my_agent/
+COPY shared/ shared/
+
+EXPOSE 8080
+
+# No ddtrace-run needed for frontend - tracing happens in backend
+ENTRYPOINT ["streamlit", "run", "my_agent/app.py", \
+    "--server.port=8080", "--server.address=0.0.0.0", "--server.headless=true"]
+```
+
+### 6c. Sidecar Configuration
+
+Create `infra/cloudrun/my-agent-api-sidecar.yaml`:
+
+```yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: my-agent-api
+  labels:
+    cloud.googleapis.com/location: us-central1
+    team: ai-agents
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/cpu-throttling: "false"
+        autoscaling.knative.dev/maxScale: "5"
+        autoscaling.knative.dev/minScale: "0"
+        run.googleapis.com/container-dependencies: '{"my-agent-api":["datadog-agent"]}'
+    spec:
+      containerConcurrency: 20
+      timeoutSeconds: 300
+      serviceAccountName: YOUR-COMPUTE-SA@developer.gserviceaccount.com
+
+      volumes:
+        - name: datadog-socket
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+
+      containers:
+        # Main application container
+        - name: my-agent-api
+          image: gcr.io/YOUR-PROJECT/my-agent-api:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: datadog-socket
+              mountPath: /var/run/datadog
+          env:
+            # Datadog APM - point to sidecar
+            - name: DD_TRACE_AGENT_URL
+              value: "http://localhost:8126"
+            - name: DD_DOGSTATSD_URL
+              value: "udp://localhost:8125"
+            - name: DD_TRACE_ENABLED
+              value: "true"
+            - name: DD_APM_ENABLED
+              value: "true"
+            - name: DD_LOGS_INJECTION
+              value: "true"
+            # Service identification
+            - name: DD_SERVICE
+              value: my-agent
+            - name: DD_ENV
+              value: production
+            - name: DD_VERSION
+              value: "1.0.0"
+            - name: DD_TAGS
+              value: "team:ai-agents"
+            - name: DD_SITE
+              value: ap1.datadoghq.com
+            # LLM Observability (agentless)
+            - name: DD_LLMOBS_ENABLED
+              value: "1"
+            - name: DD_LLMOBS_ML_APP
+              value: my-agent
+            - name: DD_LLMOBS_AGENTLESS_ENABLED
+              value: "1"
+            # Secrets
+            - name: DD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: DD_API_KEY
+                  key: latest
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+
+        # Datadog Agent sidecar
+        - name: datadog-agent
+          image: gcr.io/datadoghq/serverless-init:latest
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: 512Mi
+          volumeMounts:
+            - name: datadog-socket
+              mountPath: /var/run/datadog
+          startupProbe:
+            tcpSocket:
+              port: 8126
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 24
+          env:
+            - name: DD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: DD_API_KEY
+                  key: latest
+            - name: DD_SITE
+              value: ap1.datadoghq.com
+            - name: DD_SERVICE
+              value: my-agent
+            - name: DD_ENV
+              value: production
+            - name: DD_APM_ENABLED
+              value: "true"
+            - name: DD_APM_NON_LOCAL_TRAFFIC
+              value: "true"
+            - name: DD_DOGSTATSD_NON_LOCAL_TRAFFIC
+              value: "true"
+
+  traffic:
+    - percent: 100
+      latestRevision: true
+```
+
+### 6d. Cloud Build Configuration
+
+Create `cloudbuild-my-agent-api.yaml`:
+
+```yaml
+substitutions:
+  _REGION: us-central1
+  _SERVICE_NAME: my-agent-api
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA',
+           '-f', 'Dockerfile-my-agent-api', '.']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        sed -i "s|gcr.io/YOUR-PROJECT/${_SERVICE_NAME}:latest|gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA|g" \
+          infra/cloudrun/my-agent-api-sidecar.yaml
+
+        gcloud run services replace infra/cloudrun/my-agent-api-sidecar.yaml \
+          --region=${_REGION}
+
+        # Allow public access (or remove for private APIs)
+        gcloud run services add-iam-policy-binding ${_SERVICE_NAME} \
+          --region=${_REGION} \
+          --member="allUsers" \
+          --role="roles/run.invoker"
+
+images:
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+```
+
+## Step 7: Add to Dashboard
 
 Update `infra/datadog/dashboard.json` to include your service:
 
@@ -438,10 +719,19 @@ curl "https://ap1.datadoghq.com/api/v1/query?from=$(date -d '5 minutes ago' +%s)
 
 ## Related Files
 
+### Code & Observability
 - **Shared Observability Module**: `shared/observability/`
 - **Dashboard Configuration**: `infra/datadog/dashboard.json`
 - **Monitor Templates**: `infra/datadog/monitors.json`
 - **SLO Templates**: `infra/datadog/slos.json`
+
+### Deployment Examples (use as templates)
+- **Backend API Dockerfile**: `Dockerfile-ops-triage-agent` or `Dockerfile-sas-generator-api`
+- **Frontend UI Dockerfile**: `Dockerfile-sas-generator-ui`
+- **Sidecar Configuration**: `infra/cloudrun/ops-triage-agent-sidecar.yaml` or `infra/cloudrun/sas-generator-api-sidecar.yaml`
+- **Cloud Build Config**: `cloudbuild-ops-triage-agent.yaml` or `cloudbuild-sas-generator-api.yaml`
+
+### Scripts
 - **Monitor Factory**: `scripts/create_monitor.py`
 - **SLO Factory**: `scripts/create_slo.py`
 - **Onboarding Script**: `scripts/onboard_agent.py`

@@ -3,7 +3,7 @@ FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS build
 
 ARG DEBIAN_FRONTEND="noninteractive"
 
-ARG NON_ROOT_USER="opsassistant"
+ARG NON_ROOT_USER="sasui"
 ARG HOME_DIR="/home/${NON_ROOT_USER}"
 ARG REPO_DIR="${HOME_DIR}/app"
 
@@ -25,9 +25,9 @@ FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim
 
 ARG DEBIAN_FRONTEND="noninteractive"
 
-ARG NON_ROOT_USER="opsassistant"
-ARG NON_ROOT_UID="2222"
-ARG NON_ROOT_GID="2222"
+ARG NON_ROOT_USER="sasui"
+ARG NON_ROOT_UID="2226"
+ARG NON_ROOT_GID="2226"
 ARG HOME_DIR="/home/${NON_ROOT_USER}"
 ARG REPO_DIR="${HOME_DIR}/app"
 
@@ -44,10 +44,6 @@ ENV PYTHONIOENCODING=utf8 \
     LC_ALL="C.UTF-8" \
     PATH="${HOME_DIR}/.local/bin:${REPO_DIR}/.venv/bin:$PATH" \
     PYTHONPATH="${REPO_DIR}" \
-    DD_TRACE_ENABLED=true \
-    DD_LOGS_INJECTION=true \
-    DD_LLMOBS_ENABLED=1 \
-    DD_LLMOBS_AGENTLESS_ENABLED=1 \
     PORT=8080
 
 USER ${NON_ROOT_USER}
@@ -55,10 +51,15 @@ WORKDIR ${REPO_DIR}
 
 COPY --from=build --chown=${NON_ROOT_USER}:${NON_ROOT_GID} ${REPO_DIR} ${REPO_DIR}
 
-COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} ops_triage_agent/ ops_triage_agent/
+COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} sas_generator/ sas_generator/
 COPY --chown=${NON_ROOT_USER}:${NON_ROOT_GID} shared/ shared/
 
 EXPOSE 8080
 
-ENTRYPOINT ["ddtrace-run"]
-CMD ["uvicorn", "ops_triage_agent.main:app", "--host", "0.0.0.0", "--port", "8080"]
+HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health || exit 1
+
+ENTRYPOINT ["streamlit", "run", "sas_generator/app.py", \
+    "--server.port=8080", \
+    "--server.address=0.0.0.0", \
+    "--server.headless=true", \
+    "--browser.gatherUsageStats=false"]

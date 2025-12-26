@@ -1,5 +1,7 @@
 """Datadog LLM Observability for SAS Query Generator."""
 
+import os
+
 from datadog import initialize as dd_initialize
 from ddtrace.llmobs import LLMObs
 
@@ -12,18 +14,27 @@ AGENT_TYPE = "code-generation"
 
 
 def setup_llm_observability() -> None:
-    """Initialise Datadog LLM Observability."""
+    """Initialise Datadog LLM Observability.
+
+    Uses agentless mode only when DD_LLMOBS_AGENTLESS_ENABLED is set,
+    otherwise relies on the Datadog sidecar for trace collection.
+    """
+    agentless = os.environ.get("DD_LLMOBS_AGENTLESS_ENABLED", "0") == "1"
+
     LLMObs.enable(
         ml_app=settings.dd_llmobs_ml_app,
-        api_key=settings.dd_api_key,
-        site=settings.dd_site,
-        agentless_enabled=True,
+        api_key=settings.dd_api_key if agentless else None,
+        site=settings.dd_site if agentless else None,
+        agentless_enabled=agentless,
         integrations_enabled=True,
     )
 
 
 def setup_custom_metrics() -> None:
-    """Initialise DogStatsD for custom metrics emission."""
+    """Initialise DogStatsD for custom metrics emission.
+
+    Connects to localhost:8125 where the Datadog sidecar listens.
+    """
     dd_initialize(
         statsd_host="localhost",
         statsd_port=8125,

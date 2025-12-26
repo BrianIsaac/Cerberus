@@ -52,6 +52,7 @@ gcloud run deploy ${SERVICE_NAME} \
     --region ${REGION} \
     --platform managed \
     --no-allow-unauthenticated \
+    --labels team=ai-agents \
     --memory 512Mi \
     --cpu 1 \
     --timeout 60 \

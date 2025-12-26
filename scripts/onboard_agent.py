@@ -251,35 +251,47 @@ def print_next_steps(
         print("  [x] Generated SLO configurations")
 
     print("\nNext Steps:")
-    print("  1. Integrate shared observability in your agent code:")
+    print("  1. Create deployment configuration files:")
+    print(f"     - Dockerfile-{service}-api          # Backend API with ddtrace-run")
+    print(f"     - Dockerfile-{service}-ui           # Frontend UI (optional)")
+    print(f"     - infra/cloudrun/{service}-api-sidecar.yaml  # Knative + DD sidecar")
+    print(f"     - cloudbuild-{service}-api.yaml     # Cloud Build config")
+    print()
+    print("     See AGENT_ONBOARDING.md Step 6 for templates.")
+    print()
+    print("  2. Integrate shared observability in your agent code:")
     print("     from shared.observability import (")
     print("         emit_request_complete,")
     print("         timed_request,")
     print("         TEAM_AI_AGENTS,")
     print("     )")
     print()
-    print(f"  2. Configure your agent with the following tags:")
+    print(f"  3. Configure your agent with the following tags:")
     print(f"     - service:{service}")
     print(f"     - team:ai-agents")
     print(f"     - agent_type:{agent_type}")
     print()
+    print("  4. Deploy the backend API with Datadog sidecar:")
+    print(f"     gcloud builds submit --config=cloudbuild-{service}-api.yaml \\")
+    print("       --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)")
+    print()
 
     if dashboard_updated:
-        print("  3. Deploy dashboard changes:")
+        print("  5. Deploy dashboard changes:")
         print("     ./infra/datadog/apply_config.sh update-dashboard")
         print()
 
     if monitors_created:
-        print(f"  4. Deploy monitors to Datadog:")
+        print(f"  6. Deploy monitors to Datadog:")
         print(f"     # Use Datadog API to create monitors from infra/datadog/monitors-{service}.json")
         print()
 
     if slos_created:
-        print(f"  5. Deploy SLOs to Datadog:")
+        print(f"  7. Deploy SLOs to Datadog:")
         print(f"     # Use Datadog API to create SLOs from infra/datadog/slos-{service}.json")
         print()
 
-    print("  6. Verify using the checklist in AGENT_ONBOARDING.md")
+    print("  8. Verify using the checklist in AGENT_ONBOARDING.md")
     print()
 
 
