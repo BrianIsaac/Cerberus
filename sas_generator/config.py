@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     dd_version: str = Field(default="0.1.0", alias="DD_VERSION")
     dd_llmobs_ml_app: str = Field(default="sas-query-generator", alias="DD_LLMOBS_ML_APP")
 
+    # MCP Server
+    sas_mcp_server_url: str = Field(
+        default="http://localhost:8081/mcp",
+        alias="SAS_MCP_SERVER_URL",
+    )
+
     # Application
     port: int = Field(default=8080, alias="PORT")
 
