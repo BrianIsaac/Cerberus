@@ -1,10 +1,14 @@
 """Datadog LLM Observability for SAS Query Generator."""
 
 from datadog import initialize as dd_initialize
-from datadog import statsd
 from ddtrace.llmobs import LLMObs
 
 from sas_generator.config import settings
+from shared.observability import emit_quality_score, emit_request_complete
+
+# Agent configuration for shared observability
+AGENT_SERVICE = "sas-generator"
+AGENT_TYPE = "code-generation"
 
 
 def setup_llm_observability() -> None:
@@ -33,7 +37,7 @@ def emit_agent_metrics(
     latency_ms: float = 0,
     success: bool = True,
 ) -> None:
-    """Emit standardised agent metrics.
+    """Emit standardised agent metrics using shared observability module.
 
     Args:
         tool_calls: Number of MCP tool calls made.
@@ -41,21 +45,26 @@ def emit_agent_metrics(
         latency_ms: Total request latency in milliseconds.
         success: Whether the request succeeded.
     """
-    tags = [
-        f"service:{settings.dd_service}",
-        "team:ai-agents",
-        "agent_type:code-generation",
-        f"env:{settings.dd_env}",
-    ]
+    emit_request_complete(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        latency_ms=latency_ms,
+        success=success,
+        llm_calls=llm_calls,
+        tool_calls=tool_calls,
+    )
 
-    statsd.increment("request.count", tags=tags)
-    statsd.histogram("request.latency_ms", latency_ms, tags=tags)
 
-    if tool_calls:
-        statsd.increment("tool.calls", tool_calls, tags=tags)
+def emit_sas_quality_score(score: float, metric_name: str = "overall") -> None:
+    """Emit quality score for SAS code generation.
 
-    if llm_calls:
-        statsd.increment("llm.calls", llm_calls, tags=tags)
-
-    if not success:
-        statsd.increment("request.error", tags=tags)
+    Args:
+        score: Quality score (0-1).
+        metric_name: Name of the quality metric.
+    """
+    emit_quality_score(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        score=score,
+        metric_name=metric_name,
+    )

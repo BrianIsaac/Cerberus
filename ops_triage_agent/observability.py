@@ -9,6 +9,29 @@ from datadog import statsd
 from ddtrace.llmobs import LLMObs
 
 from ops_triage_agent.config import settings
+from shared.observability import (
+    build_tags,
+    emit_request_complete,
+    emit_step_budget_exceeded,
+)
+from shared.observability import (
+    emit_handoff_required as shared_emit_handoff_required,
+)
+from shared.observability import (
+    emit_quality_score as shared_emit_quality_score,
+)
+from shared.observability import (
+    emit_tool_error as shared_emit_tool_error,
+)
+
+# Agent configuration for shared observability
+AGENT_SERVICE = "ops-assistant"
+AGENT_TYPE = "triage"
+
+
+def _base_tags() -> list[str]:
+    """Build base tags including team:ai-agents."""
+    return build_tags(AGENT_SERVICE, AGENT_TYPE)
 
 
 def setup_llm_observability():
@@ -53,17 +76,23 @@ def emit_request_metrics(
         latency_ms: Request latency in milliseconds
         success: Whether the request succeeded
     """
-    tags = [f"endpoint:{endpoint}", f"success:{success}"]
+    # Use shared module for request completion with team:ai-agents tag
+    emit_request_complete(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        latency_ms=latency_ms,
+        success=success,
+        llm_calls=model_calls,
+        tool_calls=tool_calls,
+    )
 
-    statsd.gauge("agent.steps", step_count, tags=tags)
-    statsd.gauge("agent.tool_calls", tool_calls, tags=tags)
-    statsd.gauge("agent.model_calls", model_calls, tags=tags)
-    statsd.histogram("request.latency_ms", latency_ms, tags=tags)
+    # Additional agent-specific metrics with team tag
+    base_tags = _base_tags()
+    extra_tags = base_tags + [f"endpoint:{endpoint}", f"success:{success}"]
 
-    if success:
-        statsd.increment("request.success", tags=tags)
-    else:
-        statsd.increment("request.failure", tags=tags)
+    statsd.gauge("agent.steps", step_count, tags=extra_tags)
+    statsd.gauge("agent.tool_calls", tool_calls, tags=extra_tags)
+    statsd.gauge("agent.model_calls", model_calls, tags=extra_tags)
 
 
 def emit_budget_exceeded(budget_type: str, limit: int, actual: int):
@@ -74,8 +103,16 @@ def emit_budget_exceeded(budget_type: str, limit: int, actual: int):
         limit: The configured limit
         actual: The actual count that exceeded the limit
     """
-    tags = [f"budget_type:{budget_type}"]
-    statsd.increment("agent.step_budget_exceeded", tags=tags)
+    # Use shared module for step budget exceeded
+    emit_step_budget_exceeded(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        actual_steps=actual,
+        max_steps=limit,
+    )
+
+    # Additional budget type context
+    tags = _base_tags() + [f"budget_type:{budget_type}"]
     statsd.gauge("agent.budget_overage", actual - limit, tags=tags)
 
 
@@ -86,8 +123,12 @@ def emit_tool_error(tool_name: str, error_type: str):
         tool_name: Name of the tool that failed
         error_type: Type of error encountered
     """
-    tags = [f"tool:{tool_name}", f"error_type:{error_type}"]
-    statsd.increment("agent.tool_error", tags=tags)
+    shared_emit_tool_error(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        tool_name=tool_name,
+        error_type=error_type,
+    )
 
 
 def emit_review_outcome(outcome: str):
@@ -96,7 +137,8 @@ def emit_review_outcome(outcome: str):
     Args:
         outcome: Review outcome (approve, edit, reject)
     """
-    statsd.increment(f"agent.review.{outcome}")
+    tags = _base_tags()
+    statsd.increment(f"agent.review.{outcome}", tags=tags)
 
 
 def emit_quality_metric(metric_name: str, value: float, tags: Optional[list[str]] = None):
@@ -107,8 +149,12 @@ def emit_quality_metric(metric_name: str, value: float, tags: Optional[list[str]
         value: Metric value
         tags: Additional tags
     """
-    all_tags = tags or []
-    statsd.gauge(f"agent.quality.{metric_name}", value, tags=all_tags)
+    shared_emit_quality_score(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        score=value,
+        metric_name=metric_name,
+    )
 
 
 def emit_handoff_required(reason: str):
@@ -117,8 +163,11 @@ def emit_handoff_required(reason: str):
     Args:
         reason: Reason for requiring handoff
     """
-    tags = [f"reason:{reason}"]
-    statsd.increment("agent.handoff_required", tags=tags)
+    shared_emit_handoff_required(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        reason=reason,
+    )
 
 
 def emit_invalid_output(reason: str):
@@ -127,7 +176,7 @@ def emit_invalid_output(reason: str):
     Args:
         reason: Description of what was invalid (e.g., missing_required_field, invalid_format)
     """
-    tags = [f"reason:{reason}"]
+    tags = _base_tags() + [f"reason:{reason}"]
     statsd.increment("agent.invalid_output", tags=tags)
 
 
@@ -137,7 +186,7 @@ def emit_escalation(reason: str):
     Args:
         reason: Reason for escalation (e.g., low_confidence, budget_exceeded, security_violation)
     """
-    tags = [f"reason:{reason}"]
+    tags = _base_tags() + [f"reason:{reason}"]
     statsd.increment("agent.escalation", tags=tags)
 
 
