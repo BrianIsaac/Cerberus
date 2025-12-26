@@ -79,7 +79,8 @@ What sets this solution apart is the **scalable, self-referential observability 
 |-------------|-----|---------|
 | **Ops Assistant API** | https://ops-assistant-i4ney2dwya-uc.a.run.app | Backend triage agent |
 | **Ops Assistant Frontend** | https://ops-assistant-frontend-i4ney2dwya-uc.a.run.app | Chat UI for incident triage |
-| **SAS Query Generator** | https://sas-query-generator-i4ney2dwya-uc.a.run.app | Code generation demo |
+| **SAS Generator API** | https://sas-generator-api-i4ney2dwya-uc.a.run.app | Backend code generation API |
+| **SAS Query Generator UI** | https://sas-query-generator-i4ney2dwya-uc.a.run.app | Streamlit UI for SAS code generation |
 
 ## Datadog Organisation
 
@@ -277,14 +278,17 @@ DD_ENV=development
 # Terminal 1: Start MCP server
 uv run python -m ops_triage_mcp_server.server
 
-# Terminal 2: Start backend API
+# Terminal 2: Start Ops Assistant backend API
 uv run uvicorn ops_triage_agent.main:app --host 0.0.0.0 --port 8080
 
 # Terminal 3: Start Ops Assistant Frontend
 OPS_TRIAGE_AGENT_URL=http://localhost:8080 uv run streamlit run ops_assistant_frontend/app.py
 
-# Terminal 4: Start SAS Query Generator
-uv run streamlit run sas_generator/app.py --server.port=8502
+# Terminal 4: Start SAS Generator backend API
+uv run uvicorn sas_generator.main:app --host 0.0.0.0 --port 8082
+
+# Terminal 5: Start SAS Generator Frontend
+SAS_API_URL=http://localhost:8082 uv run streamlit run sas_generator/app.py --server.port=8502
 ```
 
 ### Running with Docker
@@ -294,12 +298,15 @@ uv run streamlit run sas_generator/app.py --server.port=8502
 docker build -f Dockerfile-ops-triage-mcp-server -t ops-mcp-server .
 docker build -f Dockerfile-ops-triage-agent -t ops-agent .
 docker build -f Dockerfile-ops-frontend -t ops-frontend .
-docker build -f Dockerfile-sas-generator -t sas-generator .
+docker build -f Dockerfile-sas-generator-api -t sas-generator-api .
+docker build -f Dockerfile-sas-generator-ui -t sas-generator-ui .
 
 # Run with environment variables
 docker run -p 8081:8080 --env-file .env ops-mcp-server
 docker run -p 8080:8080 --env-file .env -e MCP_SERVER_URL=http://host.docker.internal:8081 ops-agent
 docker run -p 8501:8080 -e OPS_TRIAGE_AGENT_URL=http://host.docker.internal:8080 ops-frontend
+docker run -p 8082:8080 --env-file .env sas-generator-api
+docker run -p 8502:8080 -e SAS_API_URL=http://host.docker.internal:8082 sas-generator-ui
 ```
 
 ### Deploy to Cloud Run
@@ -308,8 +315,12 @@ docker run -p 8501:8080 -e OPS_TRIAGE_AGENT_URL=http://host.docker.internal:8080
 # Deploy MCP server
 gcloud builds submit --config cloudbuild-mcp.yaml
 
-# Deploy main app with Datadog sidecar
+# Deploy Ops Assistant API with Datadog sidecar
 gcloud run services replace infra/cloudrun/service-with-sidecar.yaml --region us-central1
+
+# Deploy SAS Generator API with Datadog sidecar
+gcloud builds submit --config cloudbuild-sas-generator-api.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
 
 # Deploy frontends
 gcloud builds submit --config cloudbuild-ops-frontend.yaml
@@ -441,7 +452,8 @@ ops-assistant/
 │
 ├── infra/
 │   ├── cloudrun/               # Cloud Run deployment configs
-│   │   ├── service-with-sidecar.yaml  # Datadog Agent sidecar
+│   │   ├── service-with-sidecar.yaml      # Ops Assistant + Datadog sidecar
+│   │   ├── sas-generator-api-sidecar.yaml # SAS Generator API + Datadog sidecar
 │   │   └── deploy.sh           # Deployment scripts
 │   └── datadog/                # Datadog configuration
 │       ├── dashboard.json      # 7-section unified dashboard
@@ -455,8 +467,8 @@ ops-assistant/
 │   ├── slos.json               # SLOs export
 │   └── screenshots/            # Evidence screenshots
 │
-├── Dockerfile-*                # Container definitions (5 total)
-├── cloudbuild-*.yaml           # Cloud Build configs (4 total)
+├── Dockerfile-*                # Container definitions (7 total)
+├── cloudbuild-*.yaml           # Cloud Build configs (5 total)
 └── pyproject.toml              # Project dependencies (uv)
 ```
 
