@@ -143,10 +143,26 @@ async def generate(request: GenerateRequest) -> GenerateResponse:
         result = await generate_sas_code_agentic(request.query)
         latency_ms = (time.time() - start_time) * 1000
 
+        # Check for escalation (security violation, budget exceeded, etc.)
+        if result.get("escalated"):
+            logger.warning(
+                "generate_request_escalated",
+                trace_id=trace_id,
+                reason=result.get("reason"),
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": result.get("error"),
+                    "reason": result.get("reason"),
+                    "trace_id": trace_id,
+                },
+            )
+
         # Emit metrics for dashboard visibility
         emit_agent_metrics(
-            tool_calls=1,  # MCP schema fetch
-            llm_calls=1,
+            tool_calls=result.get("governance", {}).get("tool_calls", 1),
+            llm_calls=result.get("governance", {}).get("model_calls", 1),
             latency_ms=latency_ms,
             success=True,
         )
@@ -155,17 +171,20 @@ async def generate(request: GenerateRequest) -> GenerateResponse:
             "generate_request_completed",
             trace_id=trace_id,
             latency_ms=round(latency_ms, 2),
-            procedures=result.procedures_used,
+            procedures=result.get("procedures_used", []),
         )
 
         return GenerateResponse(
             trace_id=trace_id,
-            code=result.code,
-            explanation=result.explanation,
-            procedures_used=result.procedures_used,
+            code=result["code"],
+            explanation=result["explanation"],
+            procedures_used=result["procedures_used"],
             latency_ms=latency_ms,
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 422 for governance escalation)
+        raise
     except Exception as e:
         latency_ms = (time.time() - start_time) * 1000
 
