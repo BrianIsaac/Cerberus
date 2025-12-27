@@ -20,6 +20,7 @@ from ops_triage_agent.agent.state import (
     WorkflowStage,
 )
 from ops_triage_agent.config import settings
+from ops_triage_agent.governance import validate_input
 from ops_triage_agent.mcp_client.client import DatadogMCPClient
 from ops_triage_agent.observability import (
     emit_budget_exceeded,
@@ -36,7 +37,6 @@ from ops_triage_agent.prompts.synthesis_v1 import (
     SYNTHESIS_SYSTEM_PROMPT,
     SYNTHESIS_USER_TEMPLATE,
 )
-from ops_triage_agent.security import validate_input
 
 logger = structlog.get_logger()
 

@@ -11,12 +11,12 @@ from pydantic import BaseModel, Field
 
 from sas_generator.config import settings
 from sas_generator.logging_config import configure_logging
-from sas_generator.workflow import generate_sas_code_agentic
 from sas_generator.observability import (
     emit_agent_metrics,
     setup_custom_metrics,
     setup_llm_observability,
 )
+from sas_generator.workflow import generate_sas_code_agentic
 
 configure_logging()
 logger = structlog.get_logger()

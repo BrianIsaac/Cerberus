@@ -1,17 +1,26 @@
-"""Agentic workflow for SAS code generation."""
+"""Agentic workflow for SAS code generation with governance."""
 
 import json
 import re
 from typing import Any
 
+import structlog
 from ddtrace.llmobs import LLMObs
 from ddtrace.llmobs.decorators import llm, tool, workflow
 from google import genai
 from google.genai import types
 
 from sas_generator.config import settings
+from sas_generator.governance import (
+    create_budget_tracker,
+    create_escalation_handler,
+    create_security_validator,
+)
 from sas_generator.mcp_client import SASMCPClient
 from sas_generator.prompts import SASCodeResponse
+from sas_generator.quality import evaluate_code_quality, quick_syntax_check
+
+logger = structlog.get_logger()
 
 DATASET_PATTERN = re.compile(r"SASHELP\.(\w+)", re.IGNORECASE)
 
@@ -154,20 +163,50 @@ def call_gemini(enriched_prompt: str) -> SASCodeResponse:
 
 
 @workflow
-async def generate_sas_code_agentic(query: str) -> SASCodeResponse:
-    """Agentic workflow for SAS code generation.
+async def generate_sas_code_agentic(query: str) -> dict[str, Any]:
+    """Agentic workflow for SAS code generation with full governance.
 
     This workflow:
-    1. Extracts dataset from query
-    2. Fetches real schema from MCP server
-    3. Generates code with enriched context
+    1. Validates input for security concerns
+    2. Extracts dataset from query
+    3. Fetches real schema from MCP server (with budget tracking)
+    4. Generates code with enriched context
+    5. Evaluates code quality using LLM-as-judge
+    6. Returns result with governance metadata
 
     Args:
         query: User's natural language query.
 
     Returns:
-        SAS code response with code, explanation, and procedures.
+        Dictionary with code, explanation, procedures, quality scores,
+        and governance metadata.
     """
+    # Initialise governance components
+    tracker = create_budget_tracker()
+    validator = create_security_validator()
+    escalation = create_escalation_handler()
+
+    tracker.increment_step()
+
+    # Security validation
+    validation_result = validator.validate_input(query)
+    if not validation_result.is_valid:
+        logger.warning(
+            "Security validation failed",
+            reason=validation_result.reason.value if validation_result.reason else None,
+            message=validation_result.message,
+        )
+        result = escalation.escalate(
+            reason=validation_result.reason,
+            message=validation_result.message,
+        )
+        return {
+            "error": result.message,
+            "escalated": True,
+            "reason": result.reason.value,
+        }
+
+    # LLM Obs annotation
     LLMObs.annotate(
         input_data=query,
         metadata={
@@ -177,33 +216,89 @@ async def generate_sas_code_agentic(query: str) -> SASCodeResponse:
         tags={"interface": "streamlit", "agent_type": "code-generation"},
     )
 
-    dataset = extract_dataset_from_query(query)
+    tracker.increment_step()
 
+    # Dataset detection
+    dataset = extract_dataset_from_query(query)
     schema = None
     sample = None
-    tool_calls = 0
 
+    # MCP tool calls with budget tracking
     if dataset:
-        try:
-            result = await fetch_schema_from_mcp(dataset)
-            schema = result.get("schema")
-            sample = result.get("sample")
-            tool_calls = 2
-        except Exception as e:
-            LLMObs.annotate(
-                metadata={"mcp_error": str(e), "fallback": True}
-            )
+        tracker.increment_tool_call()
 
+        # Check budget before MCP call
+        if tracker.is_exceeded():
+            result = escalation.escalate_from_budget(tracker)
+            return {"error": result.message, "escalated": True, "reason": result.reason.value}
+
+        try:
+            mcp_result = await fetch_schema_from_mcp(dataset)
+            schema = mcp_result.get("schema")
+            sample = mcp_result.get("sample")
+            tracker.increment_tool_call()
+        except Exception as e:
+            logger.warning("MCP fetch failed, continuing without schema", error=str(e))
+            LLMObs.annotate(metadata={"mcp_error": str(e), "fallback": True})
+
+    tracker.increment_step()
+
+    # Check budget before LLM call
+    tracker.increment_model_call()
+    if tracker.is_exceeded():
+        result = escalation.escalate_from_budget(tracker)
+        return {"error": result.message, "escalated": True, "reason": result.reason.value}
+
+    # Build context and call Gemini
     enriched_prompt = build_context_prompt(query, schema, sample)
     response = call_gemini(enriched_prompt)
 
+    code = response.code
+    explanation = response.explanation
+    procedures = response.procedures_used
+
+    tracker.increment_step()
+
+    # Quick syntax check (no LLM call needed)
+    syntax_result = quick_syntax_check(code)
+
+    # Quality evaluation (LLM-as-judge) - only if syntax looks ok
+    quality_result = {"overall_score": syntax_result["syntax_score"], "approved": True}
+    if syntax_result["passed"]:
+        tracker.increment_model_call()
+        if not tracker.is_exceeded():
+            quality_result = await evaluate_code_quality(query, code)
+
+    quality_score = quality_result.get("overall_score", 0.0)
+
+    # Determine if approval would be required (for API response)
+    requires_approval = quality_score < 0.7
+
+    # Output annotation
     LLMObs.annotate(
-        output_data=response.model_dump(),
+        output_data={
+            "code": code,
+            "explanation": explanation,
+            "procedures": procedures,
+        },
         metadata={
             "dataset_detected": dataset,
             "schema_fetched": schema is not None,
-            "tool_calls": tool_calls,
+            "quality_score": quality_score,
+            "requires_approval": requires_approval,
+            "tool_calls": tracker.tool_calls,
+            "model_calls": tracker.model_calls,
         },
     )
 
-    return response
+    return {
+        "code": code,
+        "explanation": explanation,
+        "procedures_used": procedures,
+        "quality_score": quality_score,
+        "quality_issues": quality_result.get("issues", []),
+        "quality_suggestions": quality_result.get("suggestions", []),
+        "syntax_issues": syntax_result.get("issues", []),
+        "requires_approval": requires_approval,
+        "governance": tracker.get_state(),
+    }

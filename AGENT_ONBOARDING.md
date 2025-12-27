@@ -159,7 +159,110 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 ```
 
-## Step 4: Emit Standard Metrics
+## Step 4: Governance Integration
+
+All agents must implement bounded autonomy using the shared governance module.
+
+### 4a. Import Governance Components
+
+```python
+from shared.governance import (
+    BudgetTracker,
+    SecurityValidator,
+    EscalationHandler,
+    ApprovalGate,
+    GOVERNANCE_DEFAULTS,
+)
+```
+
+### 4b. Create Agent-Specific Governance Module
+
+Create `my_agent/governance.py`:
+
+```python
+"""Agent-specific governance configuration."""
+
+from shared.governance import (
+    BudgetTracker,
+    SecurityValidator,
+    EscalationHandler,
+    ApprovalGate,
+)
+
+AGENT_SERVICE = "my-new-agent"
+AGENT_TYPE = "my-type"
+
+
+def create_budget_tracker() -> BudgetTracker:
+    """Create a BudgetTracker with agent-specific settings."""
+    return BudgetTracker.from_config(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        max_steps=8,  # Adjust based on workflow complexity
+        max_model_calls=5,
+        max_tool_calls=6,
+    )
+
+
+def create_security_validator() -> SecurityValidator:
+    """Create a SecurityValidator for this agent."""
+    return SecurityValidator(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+    )
+
+
+def create_escalation_handler() -> EscalationHandler:
+    """Create an EscalationHandler for this agent."""
+    return EscalationHandler(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+    )
+```
+
+### 4c. Use Governance in Workflow
+
+```python
+from my_agent.governance import (
+    create_budget_tracker,
+    create_security_validator,
+    create_escalation_handler,
+)
+
+
+async def my_workflow(query: str):
+    tracker = create_budget_tracker()
+    validator = create_security_validator()
+    escalation = create_escalation_handler()
+
+    # Validate input
+    validation = validator.validate_input(query)
+    if not validation.is_valid:
+        return escalation.escalate(validation.reason, validation.message)
+
+    # Track steps
+    tracker.increment_step()
+
+    # Check budget before expensive operations
+    if tracker.is_exceeded():
+        return escalation.escalate_from_budget(tracker)
+
+    # ... rest of workflow
+```
+
+### 4d. Governance Metrics
+
+The shared governance module automatically emits these metrics:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ai_agent.governance.budget_remaining` | Gauge | Remaining budget by type |
+| `ai_agent.governance.escalation` | Counter | Escalation events by reason |
+| `ai_agent.governance.security_check` | Counter | Security validation results |
+| `ai_agent.governance.approval_requested` | Counter | Approval gate requests |
+| `ai_agent.governance.approval_latency` | Histogram | Time to human decision |
+
+## Step 5: Emit Standard Metrics
 
 Use the shared metrics functions in your workflow:
 

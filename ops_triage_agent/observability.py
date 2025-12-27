@@ -1,7 +1,7 @@
 """Datadog LLM Observability and metrics configuration."""
 
 import os
-from typing import Optional
+from typing import Optional, Union
 
 import structlog
 from datadog import initialize as dd_initialize
@@ -9,6 +9,7 @@ from datadog import statsd
 from ddtrace.llmobs import LLMObs
 
 from ops_triage_agent.config import settings
+from shared.governance import EscalationReason
 from shared.observability import (
     build_tags,
     emit_request_complete,
@@ -180,13 +181,14 @@ def emit_invalid_output(reason: str):
     statsd.increment("agent.invalid_output", tags=tags)
 
 
-def emit_escalation(reason: str):
+def emit_escalation(reason: Union[str, EscalationReason]):
     """Emit metric when workflow is escalated to human.
 
     Args:
-        reason: Reason for escalation (e.g., low_confidence, budget_exceeded, security_violation)
+        reason: Reason for escalation. Can be a string or EscalationReason enum.
     """
-    tags = _base_tags() + [f"reason:{reason}"]
+    reason_str = reason.value if isinstance(reason, EscalationReason) else reason
+    tags = _base_tags() + [f"reason:{reason_str}"]
     statsd.increment("agent.escalation", tags=tags)
 
 

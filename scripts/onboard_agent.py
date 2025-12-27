@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 TEAM_TAG = "team:ai-agents"
 DEFAULT_DASHBOARD_PATH = Path("infra/datadog/dashboard.json")
 DEFAULT_OUTPUT_DIR = Path("infra/datadog")
@@ -42,6 +41,9 @@ MONITOR_TYPES = [
     "step_budget",
     "token_budget",
     "hallucination",
+    "governance_escalation",
+    "governance_budget",
+    "governance_approval",
 ]
 
 SLO_TYPES = [
@@ -266,32 +268,43 @@ def print_next_steps(
     print("         TEAM_AI_AGENTS,")
     print("     )")
     print()
-    print(f"  3. Configure your agent with the following tags:")
+    print("  3. Integrate governance controls (bounded autonomy):")
+    print("     from shared.governance import (")
+    print("         GOVERNANCE_DEFAULTS,")
+    print("         BudgetTracker,")
+    print("         SecurityValidator,")
+    print("         EscalationHandler,")
+    print("     )")
+    print()
+    print("     See AGENT_ONBOARDING.md Step 4 for detailed governance setup.")
+    print()
+    print("  4. Configure your agent with the following tags:")
     print(f"     - service:{service}")
-    print(f"     - team:ai-agents")
+    print("     - team:ai-agents")
     print(f"     - agent_type:{agent_type}")
     print()
-    print("  4. Deploy the backend API with Datadog sidecar:")
+    print("  5. Deploy the backend API with Datadog sidecar:")
     print(f"     gcloud builds submit --config=cloudbuild-{service}-api.yaml \\")
     print("       --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)")
     print()
 
     if dashboard_updated:
-        print("  5. Deploy dashboard changes:")
+        print("  6. Deploy dashboard changes:")
         print("     ./infra/datadog/apply_config.sh update-dashboard")
         print()
 
     if monitors_created:
-        print(f"  6. Deploy monitors to Datadog:")
+        print("  7. Deploy monitors to Datadog:")
         print(f"     # Use Datadog API to create monitors from infra/datadog/monitors-{service}.json")
+        print("     # Includes governance monitors: escalation, budget, approval")
         print()
 
     if slos_created:
-        print(f"  7. Deploy SLOs to Datadog:")
+        print("  8. Deploy SLOs to Datadog:")
         print(f"     # Use Datadog API to create SLOs from infra/datadog/slos-{service}.json")
         print()
 
-    print("  8. Verify using the checklist in AGENT_ONBOARDING.md")
+    print("  9. Verify using the checklist in AGENT_ONBOARDING.md")
     print()
 
 

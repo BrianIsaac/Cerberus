@@ -157,11 +157,221 @@
       "id": 10,
       "definition": {
         "type": "group",
-        "title": "Governance & Autonomy",
+        "title": "Governance & Bounded Autonomy",
         "layout_type": "ordered",
         "widgets": [
           {
             "id": 11,
+            "definition": {
+              "type": "query_value",
+              "title": "Escalation Rate (%)",
+              "requests": [
+                {
+                  "q": "sum:ai_agent.governance.escalation{$service,$env}.as_count() / sum:ai_agent.request.count{$service,$env}.as_count() * 100",
+                  "aggregator": "avg",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 10,
+                      "palette": "white_on_red"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 10,
+                      "palette": "white_on_yellow"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 5,
+                      "palette": "white_on_green"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 12,
+            "definition": {
+              "type": "timeseries",
+              "title": "Escalations by Reason",
+              "requests": [
+                {
+                  "q": "sum:ai_agent.governance.escalation{$service,$env} by {reason}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "warm"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 13,
+            "definition": {
+              "type": "timeseries",
+              "title": "Budget Utilisation by Type",
+              "requests": [
+                {
+                  "q": "avg:ai_agent.governance.budget_utilisation{$service,$env,budget_type:step}",
+                  "display_type": "line"
+                },
+                {
+                  "q": "avg:ai_agent.governance.budget_utilisation{$service,$env,budget_type:model}",
+                  "display_type": "line"
+                },
+                {
+                  "q": "avg:ai_agent.governance.budget_utilisation{$service,$env,budget_type:tool}",
+                  "display_type": "line"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "y = 0.8",
+                  "display_type": "error dashed",
+                  "label": "Warning Threshold (80%)"
+                }
+              ]
+            }
+          },
+          {
+            "id": 14,
+            "definition": {
+              "type": "timeseries",
+              "title": "Security Validation Failures",
+              "requests": [
+                {
+                  "q": "sum:ai_agent.governance.escalation{$service,$env,reason:security_violation}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "red"
+                  }
+                },
+                {
+                  "q": "sum:ai_agent.governance.escalation{$service,$env,reason:pii_detected}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "orange"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 15,
+            "definition": {
+              "type": "query_value",
+              "title": "Pending Approvals",
+              "requests": [
+                {
+                  "q": "sum:ai_agent.governance.approval_pending{$service,$env}.as_count()",
+                  "aggregator": "last",
+                  "conditional_formats": [
+                    {
+                      "comparator": ">",
+                      "value": 10,
+                      "palette": "white_on_red"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 10,
+                      "palette": "white_on_yellow"
+                    },
+                    {
+                      "comparator": "<=",
+                      "value": 5,
+                      "palette": "white_on_green"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": 16,
+            "definition": {
+              "type": "timeseries",
+              "title": "Approval Decisions",
+              "requests": [
+                {
+                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,status:approved}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "green"
+                  }
+                },
+                {
+                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,status:rejected}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "red"
+                  }
+                },
+                {
+                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,status:auto_approved}.as_count()",
+                  "display_type": "bars",
+                  "style": {
+                    "palette": "blue"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 17,
+            "definition": {
+              "type": "toplist",
+              "title": "Top Escalation Reasons",
+              "requests": [
+                {
+                  "q": "top(sum:ai_agent.governance.escalation{$service,$env} by {reason}.as_count(), 5, 'sum', 'desc')",
+                  "style": {
+                    "palette": "warm"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": 18,
+            "definition": {
+              "type": "timeseries",
+              "title": "Quality Scores (LLM-as-Judge)",
+              "requests": [
+                {
+                  "q": "avg:ai_agent.quality_score{$service,$env,score_type:code_quality}",
+                  "display_type": "line"
+                },
+                {
+                  "q": "avg:ai_agent.quality_score{$service,$env,score_type:correctness_score}",
+                  "display_type": "line"
+                },
+                {
+                  "q": "avg:ai_agent.quality_score{$service,$env,score_type:safety_score}",
+                  "display_type": "line"
+                }
+              ],
+              "markers": [
+                {
+                  "value": "y = 0.7",
+                  "display_type": "error dashed",
+                  "label": "Approval Threshold"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 60,
+      "definition": {
+        "type": "group",
+        "title": "LLM & Workflow Calls",
+        "layout_type": "ordered",
+        "widgets": [
+          {
+            "id": 61,
             "definition": {
               "type": "timeseries",
               "title": "Gemini LLM Calls Over Time",
@@ -177,7 +387,7 @@
             }
           },
           {
-            "id": 12,
+            "id": 62,
             "definition": {
               "type": "timeseries",
               "title": "LangGraph Workflow Calls",
@@ -193,7 +403,7 @@
             }
           },
           {
-            "id": 13,
+            "id": 63,
             "definition": {
               "type": "timeseries",
               "title": "Gemini LLM Latency (avg vs P95)",
@@ -210,7 +420,7 @@
             }
           },
           {
-            "id": 14,
+            "id": 64,
             "definition": {
               "type": "timeseries",
               "title": "LangGraph Errors",

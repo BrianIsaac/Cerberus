@@ -3,6 +3,8 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+from shared.governance import GOVERNANCE_DEFAULTS
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -30,11 +32,19 @@ class Settings(BaseSettings):
     # MCP Server
     mcp_server_url: str = Field(alias="MCP_SERVER_URL")
 
-    # Agent Configuration
-    agent_max_steps: int = Field(default=8, alias="AGENT_MAX_STEPS")
-    agent_max_model_calls: int = Field(default=5, alias="AGENT_MAX_MODEL_CALLS")
-    agent_max_tool_calls: int = Field(default=6, alias="AGENT_MAX_TOOL_CALLS")
-    confidence_threshold: float = Field(default=0.7, alias="CONFIDENCE_THRESHOLD")
+    # Agent Configuration (defaults from shared governance module)
+    agent_max_steps: int = Field(
+        default=GOVERNANCE_DEFAULTS.max_steps, alias="AGENT_MAX_STEPS"
+    )
+    agent_max_model_calls: int = Field(
+        default=GOVERNANCE_DEFAULTS.max_model_calls, alias="AGENT_MAX_MODEL_CALLS"
+    )
+    agent_max_tool_calls: int = Field(
+        default=GOVERNANCE_DEFAULTS.max_tool_calls, alias="AGENT_MAX_TOOL_CALLS"
+    )
+    confidence_threshold: float = Field(
+        default=GOVERNANCE_DEFAULTS.confidence_threshold, alias="CONFIDENCE_THRESHOLD"
+    )
 
     # Application
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

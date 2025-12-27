@@ -18,7 +18,6 @@ import json
 import sys
 from typing import Any
 
-
 TEAM_TAG = "team:ai-agents"
 
 MONITOR_TEMPLATES: dict[str, dict[str, Any]] = {
@@ -264,6 +263,123 @@ Hallucination rate exceeds 10% for {service}.
         "priority": 1,
         "severity": "critical",
         "monitor_type": "quality",
+    },
+    "governance_escalation": {
+        "name": "{service} - Governance Escalation Rate",
+        "type": "metric alert",
+        "query": "sum(last_15m):sum:ai_agent.governance.escalation{{service:{service}}}.as_count() > 5",
+        "message": """## Summary
+High governance escalation rate detected for {service}.
+
+## Impact
+- Agent frequently requiring human intervention
+- Potential security or budget policy violations
+- Service: {{{{service.name}}}}
+
+## What Triggered
+- Monitor: Governance Escalation Rate
+- Window: Last 15 minutes
+- Threshold: escalations > 5
+- Escalation count: {{{{value}}}}
+
+## Escalation Reasons
+Check `reason` tag for breakdown:
+- security_violation: Input failed security validation
+- step_budget_exceeded: Agent exceeded step limit
+- model_budget_exceeded: Too many LLM calls
+- tool_budget_exceeded: Too many tool calls
+- low_confidence: Agent confidence below threshold
+
+## Next Actions
+- [ ] Review escalation traces by reason
+- [ ] Adjust governance thresholds if appropriate
+- [ ] Check for attack patterns if security_violation
+
+@ops-oncall @security-team""",
+        "options": {
+            "notify_no_data": False,
+            "evaluation_delay": 60,
+            "thresholds": {"critical": 5, "warning": 3},
+            "notify_audit": True,
+            "include_tags": True,
+        },
+        "priority": 2,
+        "severity": "high",
+        "monitor_type": "governance",
+    },
+    "governance_budget": {
+        "name": "{service} - Budget Utilisation High",
+        "type": "metric alert",
+        "query": "avg(last_15m):avg:ai_agent.governance.budget_utilisation{{service:{service}}} > 0.8",
+        "message": """## Summary
+High budget utilisation detected for {service} - agents frequently approaching limits.
+
+## Impact
+- Requests may be escalated before completion
+- Users may experience incomplete responses
+- Service: {{{{service.name}}}}
+
+## What Triggered
+- Monitor: Budget Utilisation High
+- Window: Last 15 minutes
+- Threshold: average utilisation > 80%
+- Current utilisation: {{{{value}}}}
+
+## Budget Types
+Check `budget_type` tag for breakdown:
+- step: Agent execution steps
+- model: LLM API calls
+- tool: External tool calls
+
+## Next Actions
+- [ ] Review high-utilisation traces
+- [ ] Consider adjusting budget limits
+- [ ] Optimise agent workflow efficiency
+
+@ops-oncall""",
+        "options": {
+            "notify_no_data": False,
+            "evaluation_delay": 120,
+            "thresholds": {"critical": 0.8, "warning": 0.6},
+            "include_tags": True,
+        },
+        "priority": 3,
+        "severity": "warning",
+        "monitor_type": "governance",
+    },
+    "governance_approval": {
+        "name": "{service} - Approval Queue Backlog",
+        "type": "metric alert",
+        "query": "sum(last_5m):sum:ai_agent.governance.approval_pending{{service:{service}}}.as_count() > 10",
+        "message": """## Summary
+High number of pending approvals for {service} - human review backlog building.
+
+## Impact
+- Delayed execution of agent actions
+- Users waiting for human approval
+- Service: {{{{service.name}}}}
+
+## What Triggered
+- Monitor: Approval Queue Backlog
+- Window: Last 5 minutes
+- Threshold: pending approvals > 10
+- Pending count: {{{{value}}}}
+
+## Next Actions
+- [ ] Review pending approval queue
+- [ ] Increase approval team capacity
+- [ ] Consider auto-approval for low-risk actions
+
+@ops-oncall @approval-team""",
+        "options": {
+            "notify_no_data": False,
+            "evaluation_delay": 60,
+            "thresholds": {"critical": 10, "warning": 5},
+            "include_tags": True,
+        },
+        "priority": 3,
+        "severity": "warning",
+        "monitor_type": "governance",
     },
 }
 
