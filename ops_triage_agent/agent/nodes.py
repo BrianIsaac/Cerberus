@@ -149,19 +149,55 @@ def intake_node(state: AgentState) -> dict[str, Any]:
         # Emit quality metric
         emit_quality_metric("intake_confidence", confidence)
 
+        extracted_service = result.get("service") or state.get("service")
+
         logger.info(
             "intake_completed",
             intent=intent.value,
             confidence=confidence,
-            service=result.get("service"),
+            service=extracted_service,
         )
+
+        # Build escalation reason if clarification would be needed
+        # This enables proper 422 responses instead of failing silently
+        escalation_reason = None
+        missing_info = []
+
+        if intent == IntentType.CLARIFICATION_NEEDED:
+            missing_info.append("query is too vague to classify")
+
+        if confidence < settings.confidence_threshold:
+            missing_info.append(
+                f"confidence too low ({confidence:.0%} < {settings.confidence_threshold:.0%})"
+            )
+
+        if not extracted_service:
+            missing_info.append("no service specified")
+
+        if missing_info:
+            reason_parts = ["Unable to process request: " + ", ".join(missing_info) + "."]
+            reason_parts.append("Please provide a more specific query with:")
+
+            if not extracted_service:
+                reason_parts.append(
+                    "- A specific service name (e.g., 'api-gateway', 'checkout-service')"
+                )
+
+            if intent == IntentType.CLARIFICATION_NEEDED or confidence < settings.confidence_threshold:
+                reason_parts.append("- A clear question about metrics, logs, errors, or latency")
+                reason_parts.append(
+                    "- Example: 'What is the error rate for api-gateway in the last hour?'"
+                )
+
+            escalation_reason = " ".join(reason_parts)
 
         return {
             "stage": WorkflowStage.INTAKE,
             "intent": intent,
-            "extracted_service": result.get("service"),
+            "extracted_service": extracted_service,
             "extracted_time_window": result.get("time_window", "last_15m"),
             "intake_confidence": confidence,
+            "escalation_reason": escalation_reason,
             "model_calls": state["model_calls"] + 1,
             "step_count": state["step_count"] + 1,
             "messages": [
@@ -177,13 +213,9 @@ def intake_router(state: AgentState) -> str:
         state: Current workflow state
 
     Returns:
-        Next node name: "clarification", "escalate", or "collect"
+        Next node name: "escalate" or "collect"
     """
-    intent = state["intent"]
-    confidence = state["intake_confidence"]
-    service = state["extracted_service"] or state["service"]
-
-    # Check budgets
+    # Check budgets first
     if state["step_count"] >= settings.agent_max_steps:
         emit_budget_exceeded("steps", settings.agent_max_steps, state["step_count"])
         return "escalate"
@@ -200,26 +232,10 @@ def intake_router(state: AgentState) -> str:
         )
         return "escalate"
 
-    # Check if we need clarification
-    if intent == IntentType.CLARIFICATION_NEEDED:
-        if state["clarification_attempts"] < 2:
-            return "clarification"
-        else:
-            return "escalate"
-
-    # Check confidence threshold
-    if confidence < settings.confidence_threshold:
-        if state["clarification_attempts"] < 2:
-            return "clarification"
-        else:
-            return "escalate"
-
-    # Check if we have a service
-    if not service:
-        if state["clarification_attempts"] < 2:
-            return "clarification"
-        else:
-            return "escalate"
+    # Check if escalation_reason was set by intake_node (needs clarification)
+    if state.get("escalation_reason"):
+        emit_escalation("clarification_needed")
+        return "escalate"
 
     return "collect"
 

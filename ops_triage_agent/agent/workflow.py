@@ -8,7 +8,6 @@ from langgraph.graph import END, START, StateGraph
 from ops_triage_agent.agent.nodes import (
     approval_node,
     approval_router,
-    clarification_node,
     collect_node,
     collect_router,
     complete_node,
@@ -35,7 +34,6 @@ def build_workflow() -> StateGraph:
 
     # Add nodes
     builder.add_node("intake", intake_node)
-    builder.add_node("clarification", clarification_node)
     builder.add_node("escalate", escalate_node)
     builder.add_node("collect", collect_node)
     builder.add_node("synthesis", synthesis_node)
@@ -46,19 +44,15 @@ def build_workflow() -> StateGraph:
     # Add edges
     builder.add_edge(START, "intake")
 
-    # Intake routing
+    # Intake routing - routes to escalate (with helpful message) or collect
     builder.add_conditional_edges(
         "intake",
         intake_router,
         {
-            "clarification": "clarification",
             "escalate": "escalate",
             "collect": "collect",
         },
     )
-
-    # Clarification loops back to intake
-    builder.add_edge("clarification", "intake")
 
     # Escalate ends the workflow
     builder.add_edge("escalate", END)
