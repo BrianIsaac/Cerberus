@@ -728,8 +728,8 @@ curl "https://ap1.datadoghq.com/api/v1/query?from=$(date -d '5 minutes ago' +%s)
 ### Deployment Examples (use as templates)
 - **Backend API Dockerfile**: `Dockerfile-ops-triage-agent` or `Dockerfile-sas-generator-api`
 - **Frontend UI Dockerfile**: `Dockerfile-sas-generator-ui`
-- **Sidecar Configuration**: `infra/cloudrun/ops-triage-agent-sidecar.yaml` or `infra/cloudrun/sas-generator-api-sidecar.yaml`
-- **Cloud Build Config**: `cloudbuild-ops-triage-agent.yaml` or `cloudbuild-sas-generator-api.yaml`
+- **Sidecar Configuration**: `infra/cloudrun/service-with-sidecar.yaml` or `infra/cloudrun/sas-generator-api-sidecar.yaml`
+- **Cloud Build Config**: `cloudbuild-ops-assistant.yaml` or `cloudbuild-sas-generator-api.yaml`
 
 ### Scripts
 - **Monitor Factory**: `scripts/create_monitor.py`
