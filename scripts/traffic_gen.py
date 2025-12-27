@@ -51,6 +51,51 @@ MCP_HEALTH_PROMPTS = [
     "Execute mcp_timeout_tool with extremely_large_dataset parameter",
 ]
 
+# Runaway prompts - vague queries that force multiple discovery loops
+RUNAWAY_PROMPTS = [
+    "Something seems wrong with some service somewhere, can you investigate everything?",
+    "Check all services and tell me everything that might be an issue",
+    "I heard there might be problems, investigate the entire infrastructure",
+    "Find all potential issues across all environments and services",
+    "Do a complete health check of everything and report all anomalies",
+]
+
+# Tool error prompts - queries for non-existent services
+TOOL_ERROR_PROMPTS = [
+    "Check the metrics for fictional-service-that-does-not-exist",
+    "What's the error rate for imaginary-microservice?",
+    "Get the logs from nonexistent-database-cluster",
+    "Show me traces for phantom-api-gateway service",
+    "Query the latency for made-up-payment-processor",
+]
+
+# Hallucination prompts - fictional scenarios to test quality evaluation
+HALLUCINATION_PROMPTS = [
+    "What caused the outage in the quantum-entanglement-service yesterday?",
+    "Explain the billing discrepancy in the time-travel-api from last week",
+    "Why did the flux-capacitor-service crash on Tuesday?",
+    "Analyse the root cause of the telepathy-gateway failure",
+    "What's causing the issues in our mars-colony-backend?",
+]
+
+# PII test prompts - queries containing PII patterns
+PII_TEST_PROMPTS = [
+    "User john.doe@example.com reported an issue with api-gateway",
+    "Customer with SSN 123-45-6789 is experiencing high latency",
+    "The user with credit card 4111-1111-1111-1111 saw an error",
+    "Check logs for user jane.smith@company.org phone 555-123-4567",
+    "Account holder passport AB1234567 reported payment failures",
+]
+
+# Low confidence prompts - vague/ambiguous queries
+LOW_CONFIDENCE_PROMPTS = [
+    "Is something broken?",
+    "Things seem slow",
+    "Help",
+    "Issues",
+    "Check stuff",
+]
+
 # sas-generator prompts
 SAS_PROMPTS = [
     "Show me the average MSRP by vehicle type from the CARS dataset",
@@ -64,11 +109,23 @@ SAS_PROMPTS = [
 
 
 def get_prompts_for_mode(mode: str) -> list[str]:
-    """Get prompt list for the specified mode."""
+    """Get prompt list for the specified mode.
+
+    Args:
+        mode: Traffic generation mode.
+
+    Returns:
+        List of prompts for the specified mode.
+    """
     mode_prompts = {
         "normal": NORMAL_PROMPTS,
         "latency": LATENCY_PROMPTS,
         "mcp_health": MCP_HEALTH_PROMPTS,
+        "runaway": RUNAWAY_PROMPTS,
+        "tool_error": TOOL_ERROR_PROMPTS,
+        "hallucination": HALLUCINATION_PROMPTS,
+        "pii_test": PII_TEST_PROMPTS,
+        "low_confidence": LOW_CONFIDENCE_PROMPTS,
         "sas": SAS_PROMPTS,
     }
     return mode_prompts.get(mode, NORMAL_PROMPTS)
@@ -292,6 +349,66 @@ async def run_fleet_traffic(
     print(f"  sas-generator: {sas_stats['success']}/{sas_stats['total']} successful")
 
 
+async def run_all_modes(
+    base_url: str,
+    rps: float,
+    duration_per_mode: int,
+    seed: int | None = None,
+) -> None:
+    """Run all traffic modes sequentially.
+
+    Args:
+        base_url: Base URL of ops-assistant.
+        rps: Requests per second.
+        duration_per_mode: Duration in seconds for each mode.
+        seed: Random seed for reproducibility.
+    """
+    all_modes = [
+        "normal",
+        "latency",
+        "runaway",
+        "tool_error",
+        "hallucination",
+        "pii_test",
+        "low_confidence",
+        "mcp_health",
+    ]
+
+    print("=" * 60)
+    print("RUNNING ALL TRAFFIC MODES SEQUENTIALLY")
+    print(f"  Target: {base_url}")
+    print(f"  RPS: {rps}, Duration per mode: {duration_per_mode}s")
+    print(f"  Total estimated time: {len(all_modes) * duration_per_mode}s")
+    print("=" * 60)
+
+    all_stats = {}
+    for mode in all_modes:
+        print(f"\n>>> Starting mode: {mode.upper()}")
+        stats = await run_ops_traffic(
+            base_url=base_url,
+            mode=mode,
+            rps=rps,
+            duration=duration_per_mode,
+            seed=seed,
+        )
+        all_stats[mode] = stats
+        print_stats(stats)
+        print(f"<<< Completed mode: {mode.upper()}\n")
+
+    print("=" * 60)
+    print("ALL MODES COMPLETE - SUMMARY")
+    print("=" * 60)
+    total_requests = sum(s["total"] for s in all_stats.values())
+    total_success = sum(s["success"] for s in all_stats.values())
+    total_errors = sum(s["errors"] for s in all_stats.values())
+    print(f"Total requests: {total_requests}")
+    print(f"Total successful: {total_success}")
+    print(f"Total errors: {total_errors}")
+    print("\nPer-mode breakdown:")
+    for mode, stats in all_stats.items():
+        print(f"  {mode}: {stats['success']}/{stats['total']} successful")
+
+
 def print_stats(stats: dict) -> None:
     """Print traffic statistics."""
     print("-" * 50)
@@ -324,9 +441,19 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["normal", "latency", "mcp_health"],
+        choices=[
+            "normal",
+            "latency",
+            "mcp_health",
+            "runaway",
+            "tool_error",
+            "hallucination",
+            "pii_test",
+            "low_confidence",
+            "all",
+        ],
         default="normal",
-        help="Traffic mode for ops-assistant",
+        help="Traffic mode: normal, latency, runaway, tool_error, hallucination, pii_test, low_confidence, mcp_health, or all",
     )
     parser.add_argument("--rps", type=float, default=0.5, help="Requests per second")
     parser.add_argument("--duration", type=int, default=60, help="Duration in seconds")
@@ -343,6 +470,18 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    # Handle 'all' mode specially - runs all modes sequentially
+    if args.mode == "all":
+        asyncio.run(
+            run_all_modes(
+                base_url=args.ops_url,
+                rps=args.rps,
+                duration_per_mode=args.duration // 8,  # Split duration across 8 modes
+                seed=args.seed,
+            )
+        )
+        return
 
     if args.service == "ops":
         stats = asyncio.run(

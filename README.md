@@ -332,34 +332,55 @@ gcloud builds submit --config cloudbuild-sas-generator.yaml
 Generate test traffic to verify observability and trigger detection rules:
 
 ```bash
-# Normal triage questions
+# Normal triage questions (baseline)
 uv run python scripts/traffic_gen.py --mode normal --rps 0.5 --duration 60
 
-# Trigger latency alerts
-uv run python scripts/traffic_gen.py --mode latency --rps 1.0 --duration 30
+# Trigger latency alerts (long complex prompts)
+uv run python scripts/traffic_gen.py --mode latency --rps 0.5 --duration 30
 
-# Test quality monitoring (fictional services trigger hallucination detection)
+# Test quality monitoring (fictional services)
 uv run python scripts/traffic_gen.py --mode hallucination --rps 0.5 --duration 30
 
-# Test PII detection
+# Test PII detection (emails, SSNs, credit cards in queries)
 uv run python scripts/traffic_gen.py --mode pii_test --rps 0.5 --duration 30
+
+# Test tool error handling (non-existent services)
+uv run python scripts/traffic_gen.py --mode tool_error --rps 0.5 --duration 30
+
+# Test step budget (vague queries requiring many iterations)
+uv run python scripts/traffic_gen.py --mode runaway --rps 0.5 --duration 30
 
 # Test all modes sequentially
 uv run python scripts/traffic_gen.py --mode all --rps 0.5 --duration 120
+
+# SAS Generator traffic
+uv run python scripts/traffic_gen.py --service sas --rps 0.5 --duration 60
+
+# Both services (fleet mode)
+uv run python scripts/traffic_gen.py --service fleet --rps 0.5 --duration 60
 ```
 
 ### Available Modes
 
-| Mode | Purpose | Triggers |
-|------|---------|----------|
-| `normal` | Standard triage questions | Baseline metrics |
-| `latency` | Long prompts | High P95 Latency monitor |
-| `hallucination` | Fictional services | Quality Degradation, Hallucination Rate monitors |
-| `pii_test` | PII in queries | PII Detection Alert |
-| `low_confidence` | Vague questions | Escalation metrics |
-| `runaway` | Missing identifiers | Step Budget Exceeded |
-| `tool_error` | Non-existent services | Tool Error Rate Spike |
+| Mode | Purpose | Monitor Triggered |
+|------|---------|-------------------|
+| `normal` | Standard triage questions | Baseline metrics, request volume |
+| `latency` | Long complex prompts | High P95 Latency |
+| `runaway` | Vague queries forcing many iterations | Step Budget Exceeded |
+| `tool_error` | Queries for non-existent services | Tool Error Rate Spike |
+| `hallucination` | Fictional service scenarios | Quality Degradation, Hallucination Rate |
+| `pii_test` | Queries containing PII data | PII Detection Alert |
+| `low_confidence` | Ambiguous/vague questions | Escalation metrics |
 | `mcp_health` | Invalid tool calls | MCP Connection Issues |
+| `all` | Runs all modes sequentially | All monitors |
+
+### Service Targets
+
+| Service | Flag | Description |
+|---------|------|-------------|
+| `ops` | `--service ops` | Ops Assistant API (default) |
+| `sas` | `--service sas` | SAS Generator API |
+| `fleet` | `--service fleet` | Both services concurrently |
 
 ## Onboarding New Agents
 
