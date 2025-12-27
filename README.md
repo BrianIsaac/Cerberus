@@ -60,7 +60,7 @@ What sets this solution apart is the **scalable, self-referential observability 
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key innovation:** All agents share the `team:ai-agents` tag, enabling fleet-wide monitoring while `service:<name>` allows per-agent drill-down. The shared observability module ensures consistent telemetry across all agents.
+**Key innovation:** All agents share the `team:ai-agents` tag, enabling fleet-wide monitoring while `service:<name>` allows per-agent drill-down. The shared modules ensure consistent telemetry (observability) and bounded autonomy (governance) across all agents.
 
 ## Hard Requirements Checklist
 
@@ -141,6 +141,45 @@ with timed_request("my-agent", "my-type") as metrics:
     result = await do_work()
     metrics["llm_calls"] = 1
 ```
+
+### Shared Governance Module
+
+All agents use the `shared/governance/` module for bounded autonomy:
+
+```python
+from shared.governance import (
+    create_budget_tracker,
+    create_security_validator,
+    create_escalation_handler,
+    create_approval_gate,
+)
+
+# Create governance components for your agent
+budget_tracker = create_budget_tracker("my-agent", max_steps=8, max_tool_calls=6)
+security_validator = create_security_validator("my-agent")
+escalation_handler = create_escalation_handler("my-agent", confidence_threshold=0.7)
+approval_gate = create_approval_gate("my-agent")
+
+# Use in your workflow
+if security_validator.validate_input(user_input):
+    if budget_tracker.can_proceed():
+        result = await do_work()
+        budget_tracker.record_step()
+```
+
+### Governance Metrics
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ai_agent.governance.step_count` | Gauge | Current step count |
+| `ai_agent.governance.budget_remaining` | Gauge | Steps remaining before limit |
+| `ai_agent.governance.budget_exceeded` | Counter | Budget violation events |
+| `ai_agent.security.prompt_injection_blocked` | Counter | Blocked injection attempts |
+| `ai_agent.security.pii_detected` | Counter | PII detection events |
+| `ai_agent.escalation.handoff_required` | Counter | Human escalation events |
+| `ai_agent.approval.pending` | Gauge | Pending approval requests |
+| `ai_agent.approval.approved` | Counter | Approved actions |
+| `ai_agent.approval.rejected` | Counter | Rejected actions |
 
 ### Standard Metrics
 
@@ -372,6 +411,8 @@ uv run python scripts/traffic_gen.py --service fleet --rps 0.5 --duration 60
 | `pii_test` | Queries containing PII data | PII Detection Alert |
 | `low_confidence` | Ambiguous/vague questions | Escalation metrics |
 | `mcp_health` | Invalid tool calls | MCP Connection Issues |
+| `governance` | Combined governance tests (PII, injection, budget) | Security, Escalation monitors |
+| `prompt_injection` | Injection attack patterns | Security Validator |
 | `all` | Runs all modes sequentially | All monitors |
 
 ### Service Targets
@@ -430,11 +471,17 @@ ops-assistant/
 ├── AGENT_ONBOARDING.md         # Step-by-step agent onboarding guide
 │
 ├── shared/                     # Shared utilities across all agents
-│   └── observability/          # Standardised telemetry module
-│       ├── __init__.py         # Public API exports
-│       ├── constants.py        # ai_agent.* metrics, team:ai-agents tag
-│       ├── metrics.py          # emit_* functions, timed_request
-│       └── decorators.py       # @observed_workflow decorator
+│   ├── observability/          # Standardised telemetry module
+│   │   ├── __init__.py         # Public API exports
+│   │   ├── constants.py        # ai_agent.* metrics, team:ai-agents tag
+│   │   ├── metrics.py          # emit_* functions, timed_request
+│   │   └── decorators.py       # @observed_workflow decorator
+│   └── governance/             # Bounded autonomy module
+│       ├── __init__.py         # Factory functions and exports
+│       ├── budget.py           # BudgetTracker (steps, tool calls, model calls)
+│       ├── security.py         # SecurityValidator (prompt injection, PII)
+│       ├── escalation.py       # EscalationHandler (confidence, handoff)
+│       └── approval.py         # ApprovalGate (human-in-the-loop)
 │
 ├── ops_triage_agent/           # Backend API for incident triage
 │   ├── main.py                 # FastAPI application with /ask, /triage, /review
