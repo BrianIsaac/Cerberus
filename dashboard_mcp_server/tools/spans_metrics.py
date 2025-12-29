@@ -92,7 +92,7 @@ def register_spans_metrics_tools(mcp: FastMCP) -> None:
 
             return {
                 "id": response.data.id,
-                "type": response.data.type,
+                "type": str(response.data.type.value) if response.data.type else "spans_metrics",
                 "aggregation_type": aggregation_type,
                 "filter_query": filter_query,
                 "message": f"Span metric '{metric_id}' created successfully",
@@ -114,10 +114,13 @@ def register_spans_metrics_tools(mcp: FastMCP) -> None:
             metrics = []
             for metric in response.data or []:
                 attrs = metric.attributes
+                agg_type = None
+                if attrs.compute and attrs.compute.aggregation_type:
+                    agg_type = str(attrs.compute.aggregation_type.value)
                 metrics.append({
                     "id": metric.id,
                     "filter_query": attrs.filter.query if attrs.filter else None,
-                    "aggregation_type": attrs.compute.aggregation_type if attrs.compute else None,
+                    "aggregation_type": agg_type,
                 })
 
             return {
@@ -144,14 +147,15 @@ def register_spans_metrics_tools(mcp: FastMCP) -> None:
             attrs = response.data.attributes
             result = {
                 "id": response.data.id,
-                "type": response.data.type,
+                "type": str(response.data.type.value) if response.data.type else "spans_metrics",
             }
 
             if attrs:
                 if attrs.filter:
                     result["filter_query"] = attrs.filter.query
                 if attrs.compute:
-                    result["aggregation_type"] = attrs.compute.aggregation_type
+                    if attrs.compute.aggregation_type:
+                        result["aggregation_type"] = str(attrs.compute.aggregation_type.value)
                     result["compute_path"] = getattr(attrs.compute, "path", None)
                     result["include_percentiles"] = getattr(
                         attrs.compute, "include_percentiles", False
