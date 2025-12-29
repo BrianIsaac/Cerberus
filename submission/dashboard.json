@@ -701,13 +701,18 @@
       "name": "env",
       "default": "*",
       "prefix": "env",
-      "available_values": ["production", "staging", "development"]
+      "available_values": [
+        "production",
+        "staging",
+        "development"
+      ]
     },
     {
       "name": "service",
       "default": "*",
       "prefix": "service",
       "available_values": [
+        "dashboard-enhancer",
         "ops-assistant",
         "sas-generator"
       ]

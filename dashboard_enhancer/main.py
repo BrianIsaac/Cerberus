@@ -126,31 +126,55 @@ async def enhance(request: EnhanceRequest):
         service=request.service,
     )
 
-    logger.info("enhance_started", agent_dir=request.agent_dir)
+    logger.info(
+        "enhance_started",
+        agent_dir=request.agent_dir,
+        github_url=request.github_url,
+        has_profile=request.agent_profile is not None,
+    )
 
-    # Validate input
-    validator = create_security_validator()
-    validation = validator.validate_input(request.agent_dir)
-    if not validation.is_valid:
+    # Validate we have at least one source of agent info
+    if not request.agent_dir and not request.github_url and not request.agent_profile:
         raise HTTPException(
             status_code=400,
-            detail={"error": validation.reason, "details": validation.details},
+            detail={"error": "One of agent_dir, github_url, or agent_profile must be provided"},
         )
 
-    # Check agent directory exists
-    agent_path = Path(request.agent_dir)
-    if not agent_path.exists():
-        raise HTTPException(
-            status_code=400,
-            detail={"error": f"Agent directory not found: {request.agent_dir}"},
-        )
+    agent_source = None
+    if request.github_url:
+        # Use GitHub URL directly - CodeAnalyzer will handle fetching
+        agent_source = request.github_url
+        logger.info("using_github_source", github_url=request.github_url)
+    elif request.agent_dir:
+        # Validate input path
+        validator = create_security_validator()
+        validation = validator.validate_input(request.agent_dir)
+        if not validation.is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": validation.reason, "details": validation.details},
+            )
+
+        # Check agent directory exists
+        agent_path = Path(request.agent_dir)
+        if not agent_path.exists():
+            # If agent_profile is provided, we can proceed without local code
+            if not request.agent_profile:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": f"Agent directory not found: {request.agent_dir}"},
+                )
+            logger.info("agent_dir_not_found_using_profile", agent_dir=request.agent_dir)
+        else:
+            agent_source = agent_path
 
     try:
         # Run enhancement workflow
         tracker = create_budget_tracker()
         result = await enhance_dashboard(
             service=request.service,
-            agent_dir=agent_path,
+            agent_source=agent_source,
+            agent_profile_input=request.agent_profile,
             dashboard_id=request.dashboard_id or settings.dashboard_id,
             budget_tracker=tracker,
         )

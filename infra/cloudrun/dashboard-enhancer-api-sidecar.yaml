@@ -1,0 +1,170 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: dashboard-enhancer-api
+  labels:
+    cloud.googleapis.com/location: us-central1
+    team: ai-agents
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/cpu-throttling: "false"
+        autoscaling.knative.dev/maxScale: "5"
+        autoscaling.knative.dev/minScale: "0"
+        run.googleapis.com/container-dependencies: '{"dashboard-enhancer-api":["datadog-agent"]}'
+    spec:
+      containerConcurrency: 20
+      timeoutSeconds: 300
+      serviceAccountName: 118887195862-compute@developer.gserviceaccount.com
+
+      volumes:
+        - name: datadog-socket
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+
+      containers:
+        # Main application container
+        - name: dashboard-enhancer-api
+          image: gcr.io/project-0c3b1832-f911-481b-a03/dashboard-enhancer-api:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: datadog-socket
+              mountPath: /var/run/datadog
+          env:
+            # Datadog APM configuration - point to sidecar
+            - name: DD_TRACE_AGENT_URL
+              value: "http://localhost:8126"
+            - name: DD_DOGSTATSD_URL
+              value: "udp://localhost:8125"
+            - name: DD_TRACE_ENABLED
+              value: "true"
+            - name: DD_APM_ENABLED
+              value: "true"
+            - name: DD_LOGS_INJECTION
+              value: "true"
+            - name: DD_TRACE_SAMPLE_RATE
+              value: "1.0"
+            # Datadog service identification
+            - name: DD_SERVICE
+              value: dashboard-enhancer
+            - name: DD_ENV
+              value: production
+            - name: DD_VERSION
+              value: "1.0.0"
+            - name: DD_TAGS
+              value: "team:ai-agents"
+            - name: DD_TRACE_GLOBAL_TAGS
+              value: "team:ai-agents"
+            - name: DD_SITE
+              value: ap1.datadoghq.com
+            # LLM Observability (agentless - separate from APM)
+            - name: DD_LLMOBS_ENABLED
+              value: "1"
+            - name: DD_LLMOBS_ML_APP
+              value: dashboard-enhancer
+            - name: DD_LLMOBS_AGENTLESS_ENABLED
+              value: "1"
+            # Application configuration
+            - name: GOOGLE_CLOUD_PROJECT
+              value: project-0c3b1832-f911-481b-a03
+            - name: VERTEX_LOCATION
+              value: us-central1
+            - name: GEMINI_MODEL
+              value: gemini-2.0-flash-exp
+            - name: DASHBOARD_MCP_SERVER_URL
+              value: https://dashboard-mcp-server-i4ney2dwya-uc.a.run.app/mcp
+            - name: DATADOG_DASHBOARD_ID
+              value: k3b-pcm-45c
+            # Secrets
+            - name: DD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: DD_API_KEY
+                  key: latest
+            - name: DD_APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: DD_APP_KEY
+                  key: latest
+            # GitHub token for private repo code analysis (optional)
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: GITHUB_TOKEN
+                  key: latest
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+
+        # Datadog Agent sidecar container
+        - name: datadog-agent
+          image: gcr.io/datadoghq/serverless-init:latest
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: 512Mi
+          volumeMounts:
+            - name: datadog-socket
+              mountPath: /var/run/datadog
+          startupProbe:
+            tcpSocket:
+              port: 8126
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 24
+          env:
+            - name: DD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: DD_API_KEY
+                  key: latest
+            - name: DD_SITE
+              value: ap1.datadoghq.com
+            - name: DD_SERVICE
+              value: dashboard-enhancer
+            - name: DD_ENV
+              value: production
+            - name: DD_VERSION
+              value: "1.0.0"
+            - name: DD_TAGS
+              value: "team:ai-agents"
+            # Enable APM
+            - name: DD_APM_ENABLED
+              value: "true"
+            - name: DD_APM_NON_LOCAL_TRAFFIC
+              value: "true"
+            # Enable DogStatsD
+            - name: DD_DOGSTATSD_NON_LOCAL_TRAFFIC
+              value: "true"
+            # Enable logs
+            - name: DD_LOGS_ENABLED
+              value: "true"
+            - name: DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL
+              value: "true"
+            # Trace sampling
+            - name: DD_APM_FILTER_TAGS_REJECT
+              value: ""
+            - name: DD_TRACE_SAMPLE_RATE
+              value: "1.0"
+
+  traffic:
+    - percent: 100
+      latestRevision: true

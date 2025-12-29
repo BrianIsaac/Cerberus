@@ -1,10 +1,14 @@
 """Source code analysis for understanding agent purpose and domain."""
 
 import ast
+import base64
 import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
+import httpx
 import structlog
 
 logger = structlog.get_logger()
@@ -27,7 +31,23 @@ class AgentProfile:
 
 
 class CodeAnalyzer:
-    """Analyses agent source code to extract domain information."""
+    """Analyses agent source code to extract domain information.
+
+    Supports both local directories and GitHub repository URLs.
+
+    Examples:
+        # Local directory
+        analyzer = CodeAnalyzer("/path/to/agent")
+
+        # GitHub URL (public repo)
+        analyzer = CodeAnalyzer("https://github.com/owner/repo/tree/main/agent_dir")
+
+        # GitHub URL with token (private repo)
+        analyzer = CodeAnalyzer(
+            "https://github.com/owner/repo/tree/main/agent_dir",
+            github_token="ghp_xxx"
+        )
+    """
 
     LLM_PATTERNS = {
         "google.genai": "Google Gemini",
@@ -52,18 +72,188 @@ class CodeAnalyzer:
         "datadog": "Datadog API",
     }
 
-    def __init__(self, agent_dir: Path | str):
-        """Initialise analyser with agent directory.
+    GITHUB_API_BASE = "https://api.github.com"
+
+    def __init__(self, agent_source: Path | str, github_token: str | None = None):
+        """Initialise analyser with agent directory or GitHub URL.
 
         Args:
-            agent_dir: Path to agent source directory.
+            agent_source: Local path or GitHub URL to agent source.
+            github_token: Optional GitHub token for private repos.
 
         Raises:
-            ValueError: If agent directory does not exist.
+            ValueError: If local directory does not exist or GitHub URL is invalid.
         """
-        self.agent_dir = Path(agent_dir)
-        if not self.agent_dir.exists():
-            raise ValueError(f"Agent directory not found: {agent_dir}")
+        self.github_token = github_token
+        self._temp_dir: tempfile.TemporaryDirectory | None = None
+
+        source_str = str(agent_source)
+
+        if self._is_github_url(source_str):
+            self.agent_dir = self._fetch_from_github(source_str)
+            self._is_github = True
+        else:
+            self.agent_dir = Path(agent_source)
+            self._is_github = False
+            if not self.agent_dir.exists():
+                raise ValueError(f"Agent directory not found: {agent_source}")
+
+    def __del__(self):
+        """Clean up temporary directory if created."""
+        if self._temp_dir:
+            self._temp_dir.cleanup()
+
+    def _is_github_url(self, source: str) -> bool:
+        """Check if source is a GitHub URL.
+
+        Args:
+            source: Source string to check.
+
+        Returns:
+            True if source is a GitHub URL.
+        """
+        return source.startswith("https://github.com/") or source.startswith("github.com/")
+
+    def _parse_github_url(self, url: str) -> tuple[str, str, str, str]:
+        """Parse GitHub URL into components.
+
+        Args:
+            url: GitHub URL (e.g., https://github.com/owner/repo/tree/main/path)
+
+        Returns:
+            Tuple of (owner, repo, branch, path).
+
+        Raises:
+            ValueError: If URL format is invalid.
+        """
+        if url.startswith("github.com/"):
+            url = "https://" + url
+
+        parsed = urlparse(url)
+        parts = parsed.path.strip("/").split("/")
+
+        if len(parts) < 2:
+            raise ValueError(f"Invalid GitHub URL: {url}")
+
+        owner = parts[0]
+        repo = parts[1]
+
+        # Default branch and path
+        branch = "main"
+        path = ""
+
+        # Parse /tree/branch/path or /blob/branch/path
+        if len(parts) > 3 and parts[2] in ("tree", "blob"):
+            branch = parts[3]
+            if len(parts) > 4:
+                path = "/".join(parts[4:])
+        elif len(parts) > 2:
+            # Assume it's just owner/repo/path with default branch
+            path = "/".join(parts[2:])
+
+        return owner, repo, branch, path
+
+    def _fetch_from_github(self, url: str) -> Path:
+        """Fetch code from GitHub repository.
+
+        Args:
+            url: GitHub URL to fetch from.
+
+        Returns:
+            Path to temporary directory containing fetched files.
+
+        Raises:
+            ValueError: If fetching fails.
+        """
+        owner, repo, branch, path = self._parse_github_url(url)
+
+        logger.info(
+            "fetching_from_github",
+            owner=owner,
+            repo=repo,
+            branch=branch,
+            path=path,
+        )
+
+        # Create temp directory
+        self._temp_dir = tempfile.TemporaryDirectory(prefix="agent_code_")
+        temp_path = Path(self._temp_dir.name)
+
+        # Fetch directory contents
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        if self.github_token:
+            headers["Authorization"] = f"Bearer {self.github_token}"
+
+        try:
+            self._fetch_directory(owner, repo, branch, path, temp_path, headers)
+        except Exception as e:
+            logger.error("github_fetch_failed", error=str(e))
+            raise ValueError(f"Failed to fetch from GitHub: {e}")
+
+        return temp_path
+
+    def _fetch_directory(
+        self,
+        owner: str,
+        repo: str,
+        branch: str,
+        path: str,
+        local_dir: Path,
+        headers: dict,
+    ) -> None:
+        """Recursively fetch directory contents from GitHub.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            branch: Branch name.
+            path: Path within repository.
+            local_dir: Local directory to save files to.
+            headers: HTTP headers for requests.
+        """
+        api_url = f"{self.GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}"
+        if branch != "main":
+            api_url += f"?ref={branch}"
+
+        with httpx.Client(timeout=30.0) as client:
+            response = client.get(api_url, headers=headers)
+
+            if response.status_code == 404:
+                raise ValueError(f"Path not found: {path}")
+            elif response.status_code == 403:
+                raise ValueError("Rate limit exceeded or authentication required")
+            elif response.status_code != 200:
+                raise ValueError(f"GitHub API error: {response.status_code}")
+
+            contents = response.json()
+
+            # Handle single file response
+            if isinstance(contents, dict):
+                contents = [contents]
+
+            for item in contents:
+                item_path = local_dir / item["name"]
+
+                if item["type"] == "file" and item["name"].endswith(".py"):
+                    # Fetch file content
+                    if item.get("content"):
+                        content = base64.b64decode(item["content"]).decode("utf-8")
+                    else:
+                        # Fetch from download_url for larger files
+                        file_response = client.get(item["download_url"], headers=headers)
+                        content = file_response.text
+
+                    item_path.write_text(content)
+                    logger.debug("fetched_file", path=str(item_path))
+
+                elif item["type"] == "dir":
+                    # Recursively fetch subdirectories (limit depth)
+                    if item["name"] not in ("__pycache__", ".git", "tests", "test"):
+                        item_path.mkdir(exist_ok=True)
+                        sub_path = f"{path}/{item['name']}" if path else item["name"]
+                        self._fetch_directory(
+                            owner, repo, branch, sub_path, item_path, headers
+                        )
 
     def analyze(self) -> AgentProfile:
         """Analyse agent source code and return profile.

@@ -50,9 +50,49 @@ Each agent follows a **multi-container architecture** on Cloud Run:
 Before onboarding a new agent, ensure:
 
 - [ ] Agent code is written and tested locally
-- [ ] Datadog API key (`DD_API_KEY`) is in Secret Manager
 - [ ] Access to `infra/cloudrun/` directory for sidecar configuration
 - [ ] Access to `infra/datadog/` directory for dashboard updates
+
+## Centralised Secrets
+
+The platform uses centralised secrets in Google Secret Manager. These are shared across all agents:
+
+| Secret | Purpose | Required |
+|--------|---------|----------|
+| `DD_API_KEY` | Datadog API key for metrics/traces | Yes |
+| `DD_APP_KEY` | Datadog App key for API operations | Yes |
+| `GITHUB_TOKEN` | GitHub PAT for private repo code analysis | Optional |
+
+**Using secrets in Cloud Run sidecar YAML:**
+
+```yaml
+env:
+  - name: DD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: DD_API_KEY
+        key: latest
+  - name: GITHUB_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: GITHUB_TOKEN
+        key: latest
+```
+
+**Creating a new secret (if needed):**
+
+```bash
+# Create secret from value
+echo -n "your-secret-value" | gcloud secrets create SECRET_NAME --data-file=-
+
+# Or update existing secret
+echo -n "new-value" | gcloud secrets versions add SECRET_NAME --data-file=-
+
+# Grant Cloud Run access
+gcloud secrets add-iam-policy-binding SECRET_NAME \
+  --member="serviceAccount:YOUR-COMPUTE-SA@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+```
 
 ## Step 1: Add Dependencies
 
@@ -602,7 +642,9 @@ options:
 
 Update `infra/datadog/dashboard.json` to include your service:
 
-1. Find the template variables section:
+### 7a. Update Template Variables
+
+Find the template variables section and add your service:
 
 ```json
 {
@@ -615,15 +657,35 @@ Update `infra/datadog/dashboard.json` to include your service:
 }
 ```
 
-2. Deploy the updated dashboard:
+### 7b. Update Fleet Overview Queries (Required)
+
+**Important:** The Fleet Overview widget group has hardcoded service lists that must be manually updated.
+
+Find the Fleet Overview section (widget ID 100) and update all queries to include your service:
+
+```json
+// Before
+"service IN (ops-assistant,sas-generator)"
+
+// After
+"service IN (ops-assistant,sas-generator,my-new-agent)"
+```
+
+There are 4 queries in Fleet Overview that need updating:
+- Total Agents Active
+- Request Volume by Agent
+- Error Rate by Agent (%)
+- P95 Latency by Agent (s)
+
+### 7c. Deploy Dashboard Changes
 
 ```bash
 ./infra/datadog/apply_config.sh update-dashboard
 ```
 
-Alternatively, use the onboarding script (see Step 9).
+Alternatively, use the onboarding script (see Step 10) for template variables, but you must still manually update Fleet Overview queries.
 
-## Step 7: Create Monitors (Optional)
+## Step 8: Create Monitors (Optional)
 
 Use the monitor factory script to create agent-specific monitors:
 
@@ -651,7 +713,7 @@ Available monitor types:
 
 Deploy monitors using the Datadog API or `apply_config.sh`.
 
-## Step 8: Create SLOs (Optional)
+## Step 9: Create SLOs (Optional)
 
 Use the SLO factory script for service-specific SLOs:
 
@@ -675,7 +737,7 @@ Available SLO types:
 - `faithfulness` - 99% RAGAS faithfulness > 0.7
 - `tool_reliability` - 99% tool success rate
 
-## Step 9: Use the Onboarding Script
+## Step 10: Use the Onboarding Script
 
 For automated onboarding, use the onboarding script:
 

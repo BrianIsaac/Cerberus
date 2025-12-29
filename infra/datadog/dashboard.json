@@ -16,7 +16,7 @@
               "title": "Total Agents Active",
               "requests": [
                 {
-                  "q": "count_nonzero(sum:trace.http.request.hits{service IN (ops-assistant,sas-generator)} by {service}.as_count())",
+                  "q": "count_nonzero(sum:trace.http.request.hits{service IN (ops-assistant,sas-generator,dashboard-enhancer)} by {service}.as_count())",
                   "aggregator": "last"
                 }
               ]
@@ -29,7 +29,7 @@
               "title": "Request Volume by Agent",
               "requests": [
                 {
-                  "q": "sum:trace.http.request.hits{service IN (ops-assistant,sas-generator)} by {service}.as_count()",
+                  "q": "sum:trace.http.request.hits{service IN (ops-assistant,sas-generator,dashboard-enhancer)} by {service}.as_count()",
                   "style": {
                     "palette": "dog_classic"
                   }
@@ -44,7 +44,7 @@
               "title": "Error Rate by Agent (%)",
               "requests": [
                 {
-                  "q": "(sum:trace.http.request.errors{service IN (ops-assistant,sas-generator)} by {service}.as_count() / sum:trace.http.request.hits{service IN (ops-assistant,sas-generator)} by {service}.as_count()) * 100",
+                  "q": "(sum:trace.http.request.errors{service IN (ops-assistant,sas-generator,dashboard-enhancer)} by {service}.as_count() / sum:trace.http.request.hits{service IN (ops-assistant,sas-generator,dashboard-enhancer)} by {service}.as_count()) * 100",
                   "style": {
                     "palette": "warm"
                   }
@@ -59,7 +59,7 @@
               "title": "P95 Latency by Agent (s)",
               "requests": [
                 {
-                  "q": "p95:trace.http.request.duration{service IN (ops-assistant,sas-generator)} by {service}",
+                  "q": "p95:trace.http.request.duration{service IN (ops-assistant,sas-generator,dashboard-enhancer)} by {service}",
                   "style": {
                     "palette": "cool"
                   }
@@ -701,13 +701,18 @@
       "name": "env",
       "default": "*",
       "prefix": "env",
-      "available_values": ["production", "staging", "development"]
+      "available_values": [
+        "production",
+        "staging",
+        "development"
+      ]
     },
     {
       "name": "service",
       "default": "*",
       "prefix": "service",
       "available_values": [
+        "dashboard-enhancer",
         "ops-assistant",
         "sas-generator"
       ]

@@ -3,11 +3,35 @@
 from pydantic import BaseModel, Field
 
 
+class AgentProfileInput(BaseModel):
+    """Optional agent profile input when code analysis is not possible."""
+
+    domain: str = Field(..., description="Agent domain (e.g., sas, ops, analytics)")
+    agent_type: str = Field(
+        default="assistant",
+        description="Agent type (e.g., assistant, generator, triage)",
+    )
+    llm_provider: str = Field(default="gemini", description="LLM provider used")
+    framework: str = Field(default="langgraph", description="Agent framework used")
+    description: str | None = Field(None, description="Brief agent description")
+
+
 class EnhanceRequest(BaseModel):
     """Request to enhance dashboard for an agent."""
 
     service: str = Field(..., description="Service name of the agent")
-    agent_dir: str = Field(..., description="Path to agent source directory")
+    agent_dir: str | None = Field(
+        None,
+        description="Path to agent source directory (optional if agent_profile provided)",
+    )
+    github_url: str | None = Field(
+        None,
+        description="GitHub URL to agent source (e.g., https://github.com/owner/repo/tree/main/agent_dir)",
+    )
+    agent_profile: AgentProfileInput | None = Field(
+        None,
+        description="Agent profile (required if agent_dir and github_url not available)",
+    )
     dashboard_id: str | None = Field(
         None,
         description="Dashboard ID to update (uses default if not provided)",

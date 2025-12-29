@@ -36,6 +36,13 @@ class Settings(BaseSettings):
         alias="OPS_MCP_SERVER_URL",
     )
 
+    # Backend API (for frontend to call)
+    dashboard_api_url: str = Field(
+        default="http://localhost:8083",
+        alias="DASHBOARD_ENHANCER_API_URL",
+        description="URL of the Dashboard Enhancer backend API",
+    )
+
     # Governance
     agent_max_steps: int = Field(
         default=GOVERNANCE_DEFAULTS.max_steps,
@@ -54,6 +61,13 @@ class Settings(BaseSettings):
     dashboard_id: str = Field(
         default="k3b-pcm-45c",
         alias="DATADOG_DASHBOARD_ID",
+    )
+
+    # GitHub (optional, for private repo code analysis)
+    github_token: str | None = Field(
+        default=None,
+        alias="GITHUB_TOKEN",
+        description="GitHub token for private repo access",
     )
 
     model_config = {

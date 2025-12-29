@@ -26,11 +26,50 @@ if "history" not in st.session_state:
     st.session_state.history = []
 
 
+def get_identity_token(audience: str) -> str | None:
+    """Get GCP identity token for service-to-service authentication.
+
+    Args:
+        audience: The target service URL.
+
+    Returns:
+        Identity token string, or None if running locally.
+    """
+    try:
+        import google.auth.transport.requests
+        import google.oauth2.id_token
+
+        auth_req = google.auth.transport.requests.Request()
+        return google.oauth2.id_token.fetch_id_token(auth_req, audience)
+    except Exception:
+        # Running locally without GCP credentials
+        return None
+
+
+def get_api_headers() -> dict[str, str]:
+    """Get headers for API requests, including auth if needed.
+
+    Returns:
+        Dictionary of headers for API requests.
+    """
+    headers = {"Content-Type": "application/json"}
+    api_url = settings.dashboard_api_url
+
+    # Add authentication if not running locally
+    if not api_url.startswith("http://localhost"):
+        token = get_identity_token(api_url)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+    return headers
+
+
 def get_api_client() -> httpx.Client:
     """Get HTTP client for backend API."""
     return httpx.Client(
-        base_url="http://localhost:8083",
+        base_url=settings.dashboard_api_url,
         timeout=120.0,
+        headers=get_api_headers(),
     )
 
 
@@ -132,24 +171,70 @@ with st.form("enhance_form"):
         )
     with col2:
         agent_dir = st.text_input(
-            "Agent Directory",
+            "Agent Directory (optional)",
             placeholder="e.g., sas_generator",
-            help="Path to agent source code directory",
+            help="Path to agent source code (leave empty for Cloud Run)",
         )
+
+    github_url = st.text_input(
+        "GitHub URL (optional)",
+        placeholder="e.g., https://github.com/owner/repo/tree/main/agent_dir",
+        help="GitHub URL to agent source code for remote analysis",
+    )
+
+    # Agent profile section (used when agent_dir is not available)
+    with st.expander("Agent Profile (for Cloud Run deployments)", expanded=True):
+        st.caption("Provide agent details when local code is not accessible")
+        profile_cols = st.columns(2)
+        with profile_cols[0]:
+            domain = st.selectbox(
+                "Domain",
+                options=["sas", "ops", "analytics", "dashboard", "data", "other"],
+                help="Agent's primary domain",
+            )
+            agent_type = st.selectbox(
+                "Agent Type",
+                options=["generator", "assistant", "triage", "enhancer", "analyzer"],
+                help="Type of agent",
+            )
+        with profile_cols[1]:
+            llm_provider = st.selectbox(
+                "LLM Provider",
+                options=["gemini", "openai", "anthropic", "other"],
+                help="LLM provider used by the agent",
+            )
+            framework = st.selectbox(
+                "Framework",
+                options=["langgraph", "langchain", "custom", "other"],
+                help="Agent framework",
+            )
 
     submitted = st.form_submit_button("Analyse & Generate", type="primary")
 
-    if submitted and service and agent_dir:
+    if submitted and service:
         with st.spinner("Analysing agent and generating widgets..."):
             try:
+                # Build request payload
+                payload = {
+                    "service": service,
+                    "dashboard_id": dashboard_id,
+                    "agent_profile": {
+                        "domain": domain,
+                        "agent_type": agent_type,
+                        "llm_provider": llm_provider,
+                        "framework": framework,
+                    },
+                }
+                # Include agent_dir or github_url if provided
+                if agent_dir:
+                    payload["agent_dir"] = agent_dir
+                if github_url:
+                    payload["github_url"] = github_url
+
                 with get_api_client() as client:
                     response = client.post(
                         "/enhance",
-                        json={
-                            "service": service,
-                            "agent_dir": agent_dir,
-                            "dashboard_id": dashboard_id,
-                        },
+                        json=payload,
                     )
 
                     if response.status_code == 200:

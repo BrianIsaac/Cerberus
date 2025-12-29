@@ -153,14 +153,31 @@ Return ONLY a JSON array of widget definitions, no other text."""
         try:
             widgets = json.loads(text)
             if isinstance(widgets, list):
+                widgets = self._fix_widget_queries(widgets)
                 return widgets
             elif isinstance(widgets, dict) and "widgets" in widgets:
-                return widgets["widgets"]
+                widgets = self._fix_widget_queries(widgets["widgets"])
+                return widgets
             else:
-                return [widgets]
+                return self._fix_widget_queries([widgets])
         except json.JSONDecodeError as e:
             logger.warning("json_parse_failed", error=str(e), text=text[:200])
             return []
+
+    def _fix_widget_queries(self, widgets: list[dict]) -> list[dict]:
+        """Fix common issues in widget queries from LLM output.
+
+        Args:
+            widgets: List of widget definitions.
+
+        Returns:
+            List of widgets with fixed queries.
+        """
+        for widget in widgets:
+            if "query" in widget and isinstance(widget["query"], str):
+                # Fix double braces - LLM sometimes outputs {{tag:value}} instead of {tag:value}
+                widget["query"] = re.sub(r"\{\{([^}]+)\}\}", r"{\1}", widget["query"])
+        return widgets
 
     def _apply_base_widgets(
         self,

@@ -8,10 +8,10 @@ from ddtrace.llmobs.decorators import workflow
 
 from shared.governance import BudgetTracker
 
-from .analyzer import CodeAnalyzer, TelemetryDiscoverer
+from .analyzer import AgentProfile, CodeAnalyzer, TelemetryDiscoverer
 from .designer import GeminiWidgetDesigner
 from .mcp_client import DashboardMCPClient
-from .models import WidgetPreview
+from .models import AgentProfileInput, WidgetPreview
 
 logger = structlog.get_logger()
 
@@ -19,33 +19,72 @@ logger = structlog.get_logger()
 @workflow
 async def enhance_dashboard(
     service: str,
-    agent_dir: Path,
+    agent_source: Path | str | None,
     dashboard_id: str,
     budget_tracker: BudgetTracker,
+    agent_profile_input: AgentProfileInput | None = None,
 ) -> dict[str, Any]:
     """Run the full enhancement workflow.
 
     Args:
         service: Service name of the agent.
-        agent_dir: Path to agent source directory.
+        agent_source: Path to local directory or GitHub URL (optional).
         dashboard_id: Dashboard ID to update.
         budget_tracker: Budget tracker for governance.
+        agent_profile_input: Optional agent profile when code analysis not possible.
 
     Returns:
         Enhancement result with widgets and metadata.
     """
-    logger.info("workflow_started", service=service, agent_dir=str(agent_dir))
-
-    # Step 1: Analyse agent code
-    budget_tracker.increment_step()
-    analyzer = CodeAnalyzer(agent_dir)
-    agent_profile = analyzer.analyze()
+    from .config import settings
 
     logger.info(
-        "code_analysis_complete",
-        domain=agent_profile.domain,
-        agent_type=agent_profile.agent_type,
+        "workflow_started",
+        service=service,
+        agent_source=str(agent_source) if agent_source else None,
+        has_profile_input=agent_profile_input is not None,
     )
+
+    # Step 1: Get agent profile (from code analysis or input)
+    budget_tracker.increment_step()
+
+    # Determine if we can do code analysis
+    can_analyse_code = False
+    if agent_source:
+        if isinstance(agent_source, str) and agent_source.startswith("https://github.com"):
+            can_analyse_code = True
+        elif isinstance(agent_source, Path) and agent_source.exists():
+            can_analyse_code = True
+
+    if can_analyse_code and agent_source:
+        # Analyse agent code (local or GitHub)
+        analyzer = CodeAnalyzer(agent_source, github_token=settings.github_token)
+        agent_profile = analyzer.analyze()
+        # Override service name with the one from request (more reliable)
+        agent_profile.service_name = service
+        logger.info(
+            "code_analysis_complete",
+            domain=agent_profile.domain,
+            agent_type=agent_profile.agent_type,
+            source_type="github" if isinstance(agent_source, str) else "local",
+        )
+    elif agent_profile_input:
+        # Use provided profile
+        agent_profile = AgentProfile(
+            service_name=service,
+            domain=agent_profile_input.domain,
+            agent_type=agent_profile_input.agent_type,
+            llm_provider=agent_profile_input.llm_provider,
+            framework=agent_profile_input.framework,
+            description=agent_profile_input.description or f"{service} agent",
+        )
+        logger.info(
+            "using_provided_profile",
+            domain=agent_profile.domain,
+            agent_type=agent_profile.agent_type,
+        )
+    else:
+        raise ValueError("Either agent_dir or agent_profile_input must be provided")
 
     # Step 2: Discover existing telemetry
     budget_tracker.increment_step()

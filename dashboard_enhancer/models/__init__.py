@@ -1,6 +1,7 @@
 """Data models for Dashboard Enhancement Agent."""
 
 from .schemas import (
+    AgentProfileInput,
     ApprovalRequest,
     ApprovalResponse,
     EnhanceRequest,
@@ -9,6 +10,7 @@ from .schemas import (
 )
 
 __all__ = [
+    "AgentProfileInput",
     "EnhanceRequest",
     "EnhanceResponse",
     "WidgetPreview",

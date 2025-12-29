@@ -1,0 +1,105 @@
+# Cloud Build config for Dashboard MCP Server
+# Trigger: Push to main with changes in dashboard_mcp_server/** or Dockerfile-dashboard-mcp-server
+#
+# Required substitutions (set in trigger or via --substitutions):
+#   _REGION: Cloud Run region (default: us-central1)
+#
+# Prerequisites:
+#   - Secrets must exist in Secret Manager: DD_API_KEY, DD_APP_KEY
+
+substitutions:
+  _REGION: us-central1
+  _SERVICE_NAME: dashboard-mcp-server
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+      - '-f'
+      - 'Dockerfile-dashboard-mcp-server'
+      - '.'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+
+  # Push the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image=gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--no-allow-unauthenticated'
+      - '--labels=team=ai-agents'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--min-instances=1'
+      - '--max-instances=5'
+      - '--concurrency=40'
+      - '--timeout=120'
+      - '--set-env-vars=DD_SERVICE=dashboard-mcp-server'
+      - '--set-env-vars=DD_ENV=production'
+      - '--set-env-vars=DD_SITE=ap1.datadoghq.com'
+      - '--set-env-vars=DD_TAGS=team:ai-agents'
+      - '--set-env-vars=DD_TRACE_GLOBAL_TAGS=team:ai-agents'
+      - '--set-env-vars=DD_TRACE_ENABLED=true'
+      - '--set-env-vars=DD_TRACE_AGENTLESS=true'
+      - '--set-secrets=DD_API_KEY=DD_API_KEY:latest'
+      - '--set-secrets=DD_APP_KEY=DD_APP_KEY:latest'
+
+  # Create GitHub deployment
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        apt-get update && apt-get install -y jq
+
+        SERVICE_URL=$(gcloud run services describe ${_SERVICE_NAME} --region=${_REGION} --format='value(status.url)')
+
+        DEPLOY_RESPONSE=$(curl -s -X POST \
+          -H "Authorization: token $$GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${REPO_FULL_NAME}/deployments \
+          -d '{"ref":"'$COMMIT_SHA'","environment":"dashboard-mcp-server","auto_merge":false,"required_contexts":[]}')
+
+        echo "Deploy response: $$DEPLOY_RESPONSE"
+        DEPLOY_ID=$(echo "$$DEPLOY_RESPONSE" | jq -r '.id')
+        echo "Deploy ID: $$DEPLOY_ID"
+
+        curl -s -X POST \
+          -H "Authorization: token $$GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${REPO_FULL_NAME}/deployments/$${DEPLOY_ID}/statuses \
+          -d '{"state":"success","environment_url":"'$${SERVICE_URL}'","description":"Deployed to Cloud Run"}'
+    secretEnv: ['GITHUB_TOKEN']
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/GITHUB_TOKEN/versions/latest
+      env: 'GITHUB_TOKEN'
+
+images:
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/${_SERVICE_NAME}:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
