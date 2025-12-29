@@ -28,6 +28,10 @@ class AgentProfile:
     llm_provider: str = "unknown"
     framework: str = "unknown"
     files_analyzed: list[str] = field(default_factory=list)
+    llmobs_enabled: bool = False
+    llmobs_decorators: list[str] = field(default_factory=list)
+    span_operations: list[str] = field(default_factory=list)
+    evaluation_context: dict = field(default_factory=dict)
 
 
 class CodeAnalyzer:

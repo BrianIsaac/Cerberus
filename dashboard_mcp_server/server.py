@@ -15,8 +15,10 @@ load_dotenv(env_path)
 
 from dashboard_mcp_server.config import settings  # noqa: E402
 from dashboard_mcp_server.tools.dashboards import register_dashboard_tools  # noqa: E402
+from dashboard_mcp_server.tools.llm_obs import register_llm_obs_tools  # noqa: E402
 from dashboard_mcp_server.tools.monitors import register_monitor_tools  # noqa: E402
 from dashboard_mcp_server.tools.slos import register_slo_tools  # noqa: E402
+from dashboard_mcp_server.tools.spans_metrics import register_spans_metrics_tools  # noqa: E402
 
 mcp = FastMCP(
     name="Dashboard MCP Server",
@@ -26,6 +28,8 @@ mcp = FastMCP(
 register_dashboard_tools(mcp)
 register_monitor_tools(mcp)
 register_slo_tools(mcp)
+register_spans_metrics_tools(mcp)
+register_llm_obs_tools(mcp)
 
 
 @mcp.custom_route("/health", methods=["GET"])
