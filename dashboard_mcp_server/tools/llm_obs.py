@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 from fastmcp import FastMCP
 
-from dashboard_mcp_server.tools import DD_API_KEY, DD_SITE
+from dashboard_mcp_server.tools import DD_API_KEY, DD_APP_KEY, DD_SITE
 
 
 def register_llm_obs_tools(mcp: FastMCP) -> None:
@@ -21,6 +21,7 @@ def register_llm_obs_tools(mcp: FastMCP) -> None:
         """Get headers for LLM Obs API requests."""
         return {
             "DD-API-KEY": DD_API_KEY,
+            "DD-APPLICATION-KEY": DD_APP_KEY,
             "Content-Type": "application/json",
         }
 
@@ -52,16 +53,21 @@ def register_llm_obs_tools(mcp: FastMCP) -> None:
 
         query = f"@ml_app:{ml_app}"
         if span_type:
-            query += f" @span.type:{span_type}"
+            query += f" @span_kind:{span_type}"
 
         payload = {
-            "filter": {
-                "query": query,
-                "from": from_time,
-                "to": to_time,
-            },
-            "page": {
-                "limit": limit,
+            "data": {
+                "type": "spans",
+                "attributes": {
+                    "filter": {
+                        "query": query,
+                        "from": from_time,
+                        "to": to_time,
+                    },
+                    "page": {
+                        "limit": limit,
+                    },
+                },
             },
         }
 
@@ -87,12 +93,12 @@ def register_llm_obs_tools(mcp: FastMCP) -> None:
                     "span_id": span.get("id"),
                     "trace_id": attrs.get("trace_id"),
                     "name": attrs.get("name"),
-                    "span_type": attrs.get("meta", {}).get("span.kind"),
-                    "input": attrs.get("meta", {}).get("input", {}).get("value"),
-                    "output": attrs.get("meta", {}).get("output", {}).get("value"),
-                    "model": attrs.get("meta", {}).get("model_name"),
+                    "span_type": attrs.get("span_kind"),
+                    "input": attrs.get("input", {}).get("value"),
+                    "output": attrs.get("output", {}).get("value"),
+                    "model": attrs.get("model_name"),
                     "duration_ns": attrs.get("duration"),
-                    "timestamp": attrs.get("start"),
+                    "timestamp": attrs.get("start_ns"),
                     "tags": attrs.get("tags", []),
                 })
 

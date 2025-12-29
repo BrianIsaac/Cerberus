@@ -76,6 +76,22 @@ class CodeAnalyzer:
         "datadog": "Datadog API",
     }
 
+    LLMOBS_PATTERNS = {
+        "LLMObs.enable": "llmobs_enabled",
+        "@llm": "llm_decorator",
+        "@workflow": "workflow_decorator",
+        "@tool": "tool_decorator",
+        "LLMObs.annotate": "annotate_calls",
+    }
+
+    SPAN_TYPE_PATTERNS = {
+        "@llm": "llm",
+        "@workflow": "workflow",
+        "@tool": "tool",
+        "@task": "task",
+        "@agent": "agent",
+    }
+
     GITHUB_API_BASE = "https://api.github.com"
 
     def __init__(self, agent_source: Path | str, github_token: str | None = None):
@@ -273,13 +289,26 @@ class CodeAnalyzer:
         functions: list[dict] = []
         docstrings: list[str] = []
         prompts: list[str] = []
+        all_content: str = ""
+        llmobs_info = {"enabled": False, "decorators": [], "has_annotate": False}
 
         for file_path in files_to_analyze:
+            with open(file_path) as f:
+                content = f.read()
+                all_content += content + "\n"
+
             file_info = self._analyze_file(file_path)
             imports.update(file_info.get("imports", []))
             functions.extend(file_info.get("functions", []))
             docstrings.extend(file_info.get("docstrings", []))
             prompts.extend(file_info.get("prompts", []))
+
+            file_llmobs = self._detect_llmobs_usage(content, imports)
+            if file_llmobs["enabled"]:
+                llmobs_info["enabled"] = True
+            llmobs_info["decorators"].extend(file_llmobs["decorators"])
+            if file_llmobs["has_annotate"]:
+                llmobs_info["has_annotate"] = True
 
         llm_provider = self._detect_llm_provider(imports)
         framework = self._detect_framework(imports)
@@ -289,6 +318,11 @@ class CodeAnalyzer:
         service_name = self._detect_service_name()
         primary_actions = self._extract_actions(functions)
         output_types = self._extract_output_types(functions)
+
+        span_operations = self._extract_span_operations(functions, all_content)
+        evaluation_context = self._extract_evaluation_context(
+            docstrings, functions, output_types
+        )
 
         profile = AgentProfile(
             service_name=service_name,
@@ -301,13 +335,18 @@ class CodeAnalyzer:
             llm_provider=llm_provider,
             framework=framework,
             files_analyzed=[str(f) for f in files_to_analyze],
+            llmobs_enabled=llmobs_info["enabled"],
+            llmobs_decorators=list(set(llmobs_info["decorators"])),
+            span_operations=span_operations,
+            evaluation_context=evaluation_context,
         )
 
         logger.info(
             "analysis_complete",
             service=profile.service_name,
             domain=profile.domain,
-            llm_provider=profile.llm_provider,
+            llmobs_enabled=profile.llmobs_enabled,
+            span_operations_count=len(profile.span_operations),
         )
 
         return profile
@@ -322,6 +361,7 @@ class CodeAnalyzer:
             "prompts.py",
             "prompts/*.py",
             "config.py",
+            "observability.py",
         ]
 
         files = []
@@ -378,8 +418,9 @@ class CodeAnalyzer:
                     and isinstance(node.body[0].value, ast.Constant)
                 ):
                     docstring = node.body[0].value.value
-                    func_info["docstring"] = docstring
-                    docstrings.append(docstring)
+                    if isinstance(docstring, str):
+                        func_info["docstring"] = docstring
+                        docstrings.append(docstring)
 
                 functions.append(func_info)
 
@@ -587,3 +628,99 @@ class CodeAnalyzer:
                     outputs.add(keyword)
 
         return list(outputs)
+
+    def _detect_llmobs_usage(self, content: str, imports: set[str]) -> dict:
+        """Detect LLM Observability usage patterns.
+
+        Args:
+            content: File content.
+            imports: Set of imports.
+
+        Returns:
+            Dict with LLMObs usage details.
+        """
+        result = {
+            "enabled": False,
+            "decorators": [],
+            "has_annotate": False,
+        }
+
+        if "ddtrace" in imports or "LLMObs" in content:
+            result["enabled"] = "LLMObs.enable" in content
+
+        for pattern, decorator_type in self.LLMOBS_PATTERNS.items():
+            if pattern in content:
+                if decorator_type.endswith("_decorator"):
+                    result["decorators"].append(decorator_type.replace("_decorator", ""))
+                elif decorator_type == "annotate_calls":
+                    result["has_annotate"] = True
+
+        return result
+
+    def _extract_span_operations(self, functions: list[dict], content: str) -> list[str]:
+        """Extract span operation names from decorated functions.
+
+        Args:
+            functions: List of function info dicts.
+            content: Full file content.
+
+        Returns:
+            List of span operation names.
+        """
+        operations = []
+
+        for func in functions:
+            func_name = func["name"]
+            for pattern, span_type in self.SPAN_TYPE_PATTERNS.items():
+                pattern_regex = rf'{pattern}\([^)]*\)\s*\n\s*(async\s+)?def\s+{func_name}'
+                if re.search(pattern_regex, content):
+                    operations.append(f"{span_type}:{func_name}")
+                    break
+
+        return operations
+
+    def _extract_evaluation_context(
+        self,
+        docstrings: list[str],
+        functions: list[dict],
+        output_types: list[str],
+    ) -> dict:
+        """Extract context useful for generating evaluations.
+
+        Args:
+            docstrings: List of docstrings.
+            functions: List of function info.
+            output_types: Detected output types.
+
+        Returns:
+            Context dict for evaluation generation.
+        """
+        context = {
+            "output_format": "unknown",
+            "validation_hints": [],
+            "quality_aspects": [],
+        }
+
+        all_text = " ".join(docstrings).lower()
+
+        if "code" in output_types or "sas" in all_text:
+            context["output_format"] = "code"
+            context["quality_aspects"] = ["syntax_validity", "correctness", "efficiency"]
+        elif "json" in all_text or "structured" in all_text:
+            context["output_format"] = "structured"
+            context["quality_aspects"] = ["schema_compliance", "completeness"]
+        elif "response" in output_types or "answer" in all_text:
+            context["output_format"] = "text"
+            context["quality_aspects"] = ["relevancy", "helpfulness", "accuracy"]
+
+        validation_keywords = ["must", "should", "validate", "check", "ensure", "verify"]
+        for doc in docstrings:
+            for keyword in validation_keywords:
+                if keyword in doc.lower():
+                    sentences = doc.split(".")
+                    for sentence in sentences:
+                        if keyword in sentence.lower():
+                            context["validation_hints"].append(sentence.strip())
+                            break
+
+        return context
