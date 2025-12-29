@@ -20,14 +20,16 @@ class GeminiWidgetDesigner:
     """Uses Vertex AI Gemini to design domain-specific widgets."""
 
     SYSTEM_PROMPT = """You are a Datadog dashboard expert specialising in AI/LLM observability.
-Your task is to design dashboard widgets that are SPECIFIC to the agent's domain, not generic health metrics.
+Your task is to design dashboard widgets using REAL metrics that have been provisioned.
 
 Guidelines:
-1. Widget titles should reflect the agent's domain (e.g., "SAS Query Complexity" not "Request Count")
-2. Use metrics that already exist in Datadog (provided in telemetry profile)
-3. Focus on domain-specific insights, not just standard APM metrics
-4. Each widget should tell a story about the agent's performance in its specific domain
-5. Use appropriate widget types: timeseries for trends, query_value for KPIs, toplist for rankings
+1. Use ONLY the metrics provided in the "Provisioned Metrics" section
+2. Use ONLY the evaluation labels provided in the "Available Evaluations" section
+3. For evaluation metrics, use query format: avg:llmobs.evaluation.<label>{ml_app:<service>}
+4. For span-based metrics, use the exact metric ID provided
+5. Widget titles should reflect the agent's domain
+6. Each widget should tell a story about the agent's performance
+7. Use appropriate widget types: timeseries for trends, query_value for KPIs, toplist for rankings
 
 Output valid JSON only. No markdown, no explanation."""
 
@@ -45,12 +47,16 @@ Output valid JSON only. No markdown, no explanation."""
         self,
         agent_profile: AgentProfile,
         telemetry_profile: TelemetryProfile,
+        provisioned_metrics: list[dict] | None = None,
+        evaluation_labels: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Design domain-specific widgets using Gemini.
 
         Args:
             agent_profile: Profile of the agent being enhanced.
             telemetry_profile: Available telemetry from Datadog.
+            provisioned_metrics: Metrics provisioned for this agent.
+            evaluation_labels: Evaluation labels configured for this agent.
 
         Returns:
             List of widget definitions.
@@ -59,10 +65,18 @@ Output valid JSON only. No markdown, no explanation."""
             "designing_widgets",
             service=agent_profile.service_name,
             domain=agent_profile.domain,
+            provisioned_metrics_count=len(provisioned_metrics or []),
+            evaluation_labels_count=len(evaluation_labels or []),
         )
 
         base_widgets = get_base_widgets(agent_profile.agent_type)
-        prompt = self._build_prompt(agent_profile, telemetry_profile, base_widgets)
+        prompt = self._build_prompt(
+            agent_profile,
+            telemetry_profile,
+            base_widgets,
+            provisioned_metrics or [],
+            evaluation_labels or [],
+        )
 
         try:
             response = await self.client.aio.models.generate_content(
