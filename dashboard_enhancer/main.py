@@ -177,6 +177,8 @@ async def enhance(request: EnhanceRequest):
             agent_profile_input=request.agent_profile,
             dashboard_id=request.dashboard_id or settings.dashboard_id,
             budget_tracker=tracker,
+            run_evaluations=request.run_evaluations,
+            provision_metrics=request.provision_metrics,
         )
 
         # Store for approval
@@ -221,7 +223,10 @@ async def enhance(request: EnhanceRequest):
             widgets=widget_previews,
             group_title=result["group_title"],
             requires_approval=True,
-            message="Enhancement recommendations generated. Review and approve to apply.",
+            message="Observability infrastructure provisioned. Review and approve to apply widgets.",
+            llmobs_status=result.get("llmobs_status", {}),
+            provisioned_metrics=result.get("provisioned_metrics", []),
+            evaluation_results=result.get("evaluation_results", {}),
         )
 
     except Exception as e:
@@ -298,4 +303,44 @@ async def list_pending():
     return {
         "count": len(pending_approvals),
         "trace_ids": list(pending_approvals.keys()),
+    }
+
+
+@app.delete("/metrics/{service}")
+async def cleanup_metrics(service: str):
+    """Delete all provisioned metrics for a service.
+
+    Args:
+        service: Service name to cleanup metrics for.
+
+    Returns:
+        Cleanup results.
+    """
+    from .analyzer import AgentProfile
+    from .provisioner import MetricsProvisioner
+
+    logger.info("cleanup_metrics_started", service=service)
+
+    # Create minimal profile for cleanup
+    profile = AgentProfile(
+        service_name=service,
+        agent_type="unknown",
+        domain="unknown",
+        description="",
+    )
+
+    provisioner = MetricsProvisioner(profile)
+    result = await provisioner.cleanup_metrics()
+
+    logger.info(
+        "cleanup_metrics_completed",
+        service=service,
+        deleted_count=len(result.get("deleted", [])),
+    )
+
+    return {
+        "service": service,
+        "deleted": result.get("deleted", []),
+        "failed": result.get("failed", []),
+        "message": f"Deleted {len(result.get('deleted', []))} metrics",
     }

@@ -36,6 +36,14 @@ class EnhanceRequest(BaseModel):
         None,
         description="Dashboard ID to update (uses default if not provided)",
     )
+    run_evaluations: bool = Field(
+        True,
+        description="Whether to run evaluations on existing spans",
+    )
+    provision_metrics: bool = Field(
+        True,
+        description="Whether to provision span-based metrics",
+    )
 
 
 class WidgetPreview(BaseModel):
@@ -58,6 +66,9 @@ class EnhanceResponse(BaseModel):
     group_title: str
     requires_approval: bool = True
     message: str
+    llmobs_status: dict = Field(default_factory=dict)
+    provisioned_metrics: list[dict] = Field(default_factory=list)
+    evaluation_results: dict = Field(default_factory=dict)
 
 
 class ApprovalRequest(BaseModel):
