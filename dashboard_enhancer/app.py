@@ -117,6 +117,113 @@ def render_telemetry_profile(profile: dict):
         st.success(f"Detected: {', '.join(flags)}")
 
 
+def render_llmobs_status(status: dict):
+    """Render LLM Observability status information.
+
+    Args:
+        status: LLMObs status dictionary from API response.
+    """
+    st.subheader("LLM Observability Status")
+
+    if not status:
+        st.info("LLMObs status not available")
+        return
+
+    cols = st.columns(3)
+    with cols[0]:
+        is_enabled = status.get("enabled", False)
+        st.metric(
+            "Status",
+            "Enabled" if is_enabled else "Not Enabled",
+        )
+    with cols[1]:
+        st.metric("ML App", status.get("ml_app", "Unknown"))
+    with cols[2]:
+        st.metric("Spans Found", status.get("spans_found", 0))
+
+    message = status.get("message", "")
+    if message:
+        if status.get("enabled"):
+            st.success(message)
+        else:
+            st.warning(message)
+
+
+def render_provisioned_metrics(metrics: list[dict]):
+    """Render provisioned metrics information.
+
+    Args:
+        metrics: List of provisioned metric dictionaries.
+    """
+    st.subheader("Provisioned Span-Based Metrics")
+
+    if not metrics:
+        st.info("No metrics provisioned")
+        return
+
+    created = [m for m in metrics if m.get("status") == "created"]
+    existing = [m for m in metrics if m.get("status") == "exists"]
+    failed = [m for m in metrics if m.get("status") == "failed"]
+
+    cols = st.columns(3)
+    with cols[0]:
+        st.metric("Created", len(created))
+    with cols[1]:
+        st.metric("Already Existed", len(existing))
+    with cols[2]:
+        st.metric("Failed", len(failed))
+
+    if created:
+        with st.expander("Newly Created Metrics", expanded=True):
+            for m in created:
+                st.code(m.get("id", "Unknown"), language=None)
+
+    if existing:
+        with st.expander("Existing Metrics"):
+            for m in existing:
+                st.code(m.get("id", "Unknown"), language=None)
+
+    if failed:
+        with st.expander("Failed Metrics", expanded=True):
+            for m in failed:
+                st.error(f"{m.get('id')}: {m.get('error', 'Unknown error')}")
+
+
+def render_evaluation_results(results: dict):
+    """Render evaluation results information.
+
+    Args:
+        results: Evaluation results dictionary from API response.
+    """
+    st.subheader("Domain Evaluations")
+
+    if not results:
+        st.info("No evaluations run")
+        return
+
+    if not results.get("success"):
+        st.warning(results.get("error", "Evaluations not available"))
+        if results.get("details"):
+            st.caption(results["details"])
+        return
+
+    cols = st.columns(4)
+    with cols[0]:
+        st.metric("Spans Evaluated", results.get("spans_evaluated", 0))
+    with cols[1]:
+        st.metric("Evaluations Run", results.get("evaluations_run", 0))
+    with cols[2]:
+        st.metric("Successful", results.get("successful", 0))
+    with cols[3]:
+        st.metric("Failed", results.get("failed", 0))
+
+    eval_types = results.get("evaluation_types", [])
+    if eval_types:
+        st.write("**Evaluation Types Applied:**")
+        for eval_type in eval_types:
+            st.code(eval_type, language=None)
+
+
 def render_widget_preview(widgets: list[dict], group_title: str):
     """Render widget preview."""
     st.subheader(f"Widget Group: {group_title}")
@@ -209,10 +316,27 @@ with st.form("enhance_form"):
                 help="Agent framework",
             )
 
+    # Observability provisioning options
+    st.subheader("Observability Provisioning")
+    st.caption("Configure automatic observability infrastructure setup")
+    prov_cols = st.columns(2)
+    with prov_cols[0]:
+        provision_metrics = st.checkbox(
+            "Provision Span-Based Metrics",
+            value=True,
+            help="Automatically create span-based metrics in Datadog for this service",
+        )
+    with prov_cols[1]:
+        run_evaluations = st.checkbox(
+            "Run Domain Evaluations",
+            value=True,
+            help="Run LLM-as-judge evaluations on recent spans using Gemini",
+        )
+
     submitted = st.form_submit_button("Analyse & Generate", type="primary")
 
     if submitted and service:
-        with st.spinner("Analysing agent and generating widgets..."):
+        with st.spinner("Analysing agent and provisioning observability..."):
             try:
                 # Build request payload
                 payload = {
@@ -224,6 +348,8 @@ with st.form("enhance_form"):
                         "llm_provider": llm_provider,
                         "framework": framework,
                     },
+                    "provision_metrics": provision_metrics,
+                    "run_evaluations": run_evaluations,
                 }
                 # Include agent_dir or github_url if provided
                 if agent_dir:
@@ -258,7 +384,9 @@ if st.session_state.enhancement_result:
     st.header("Enhancement Recommendations")
 
     # Tabs for different views
-    tab1, tab2, tab3 = st.tabs(["Summary", "Widgets", "Raw Data"])
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["Summary", "Observability", "Widgets", "Raw Data"]
+    )
 
     with tab1:
         render_agent_profile(result.get("agent_profile", {}))
@@ -266,12 +394,19 @@ if st.session_state.enhancement_result:
         render_telemetry_profile(result.get("telemetry_profile", {}))
 
     with tab2:
+        render_llmobs_status(result.get("llmobs_status", {}))
+        st.divider()
+        render_provisioned_metrics(result.get("provisioned_metrics", []))
+        st.divider()
+        render_evaluation_results(result.get("evaluation_results", {}))
+
+    with tab3:
         render_widget_preview(
             result.get("widgets", []),
             result.get("group_title", "New Widgets"),
         )
 
-    with tab3:
+    with tab4:
         st.json(result)
 
     # Approval buttons
