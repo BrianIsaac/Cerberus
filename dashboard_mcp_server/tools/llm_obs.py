@@ -29,24 +29,13 @@ def register_llm_obs_tools(mcp: FastMCP) -> None:
         """Get base URL for LLM Obs API."""
         return f"https://api.{DD_SITE}"
 
-    @mcp.tool()
-    async def fetch_llm_obs_spans(
+    async def _fetch_llm_obs_spans_impl(
         ml_app: str,
         hours_back: int = 1,
         limit: int = 50,
         span_type: str | None = None,
     ) -> dict[str, Any]:
-        """Fetch LLM Observability spans for evaluation.
-
-        Args:
-            ml_app: The ML application name (matches DD_LLMOBS_ML_APP).
-            hours_back: How many hours back to search (default 1).
-            limit: Maximum number of spans to return (default 50).
-            span_type: Optional span type filter (e.g., 'llm', 'workflow').
-
-        Returns:
-            List of spans with input/output data.
-        """
+        """Internal implementation for fetching LLM Obs spans."""
         now = datetime.now(timezone.utc)
         from_time = (now - timedelta(hours=hours_back)).strftime("%Y-%m-%dT%H:%M:%SZ")
         to_time = now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -108,6 +97,26 @@ def register_llm_obs_tools(mcp: FastMCP) -> None:
                 "time_range": f"{from_time} to {to_time}",
                 "spans": spans,
             }
+
+    @mcp.tool()
+    async def fetch_llm_obs_spans(
+        ml_app: str,
+        hours_back: int = 1,
+        limit: int = 50,
+        span_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch LLM Observability spans for evaluation.
+
+        Args:
+            ml_app: The ML application name (matches DD_LLMOBS_ML_APP).
+            hours_back: How many hours back to search (default 1).
+            limit: Maximum number of spans to return (default 50).
+            span_type: Optional span type filter (e.g., 'llm', 'workflow').
+
+        Returns:
+            List of spans with input/output data.
+        """
+        return await _fetch_llm_obs_spans_impl(ml_app, hours_back, limit, span_type)
 
     @mcp.tool()
     async def submit_evaluation(
@@ -261,7 +270,7 @@ def register_llm_obs_tools(mcp: FastMCP) -> None:
         Returns:
             Status indicating if LLM Obs spans exist.
         """
-        result = await fetch_llm_obs_spans(ml_app=ml_app, hours_back=24, limit=1)
+        result = await _fetch_llm_obs_spans_impl(ml_app=ml_app, hours_back=24, limit=1)
 
         if "error" in result:
             return {
