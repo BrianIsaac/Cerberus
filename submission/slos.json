@@ -1,8 +1,8 @@
 {
   "slos": [
     {
-      "name": "Ops Assistant - Availability SLO",
-      "description": "99.9% of requests should complete successfully without errors",
+      "name": "AI Agents - Availability SLO",
+      "description": "99.9% of requests across all AI agents should complete successfully without errors",
       "type": "metric",
       "thresholds": [
         {
@@ -21,15 +21,14 @@
         "denominator": "sum:trace.http.request.hits{service:ops-assistant}.as_count()"
       },
       "tags": [
-        "service:ops-assistant",
-        "slo_type:availability",
-        "team:ops"
+        "team:ai-agents",
+        "slo_type:availability"
       ],
       "monitor_ids": []
     },
     {
-      "name": "Ops Assistant - Latency SLO",
-      "description": "95% of the time, P95 latency should be under 10 seconds",
+      "name": "AI Agents - Latency SLO",
+      "description": "95% of the time, P95 latency across all AI agents should be under 10 seconds",
       "type": "monitor",
       "thresholds": [
         {
@@ -44,15 +43,14 @@
         }
       ],
       "tags": [
-        "service:ops-assistant",
-        "slo_type:latency",
-        "team:ops"
+        "team:ai-agents",
+        "slo_type:latency"
       ],
-      "monitor_ids": [11175958]
+      "monitor_ids": [11218408]
     },
     {
-      "name": "Ops Assistant - Governance SLO",
-      "description": "99% of requests should stay within agent step budgets and have no tool failures",
+      "name": "AI Agents - Governance SLO",
+      "description": "99% of requests across all AI agents should stay within step budgets and have no tool failures",
       "type": "metric",
       "thresholds": [
         {
@@ -67,20 +65,18 @@
         }
       ],
       "query": {
-        "numerator": "sum:trace.http.request.hits{service:ops-assistant}.as_count() - sum:agent.step_budget_exceeded{service:ops-assistant}.as_count() - sum:agent.tool_error{service:ops-assistant}.as_count()",
+        "numerator": "sum:trace.http.request.hits{service:ops-assistant}.as_count() - sum:ai_agent.step_budget_exceeded{service:ops-assistant}.as_count() - sum:ai_agent.tool.errors{service:ops-assistant}.as_count()",
         "denominator": "sum:trace.http.request.hits{service:ops-assistant}.as_count()"
       },
       "tags": [
-        "service:ops-assistant",
-        "slo_type:governance",
-        "team:ops",
-        "team:ml"
+        "team:ai-agents",
+        "slo_type:governance"
       ],
       "monitor_ids": []
     },
     {
-      "name": "Ops Assistant - Quality SLO (Hallucination-Free)",
-      "description": "99.5% of requests should not produce hallucinated responses",
+      "name": "AI Agents - Quality SLO (Hallucination-Free)",
+      "description": "99.5% of requests across all AI agents should not produce hallucinated responses",
       "type": "metric",
       "thresholds": [
         {
@@ -99,27 +95,26 @@
         "denominator": "sum:llmobs.evaluation.hallucination.total{service:ops-assistant}.as_count()"
       },
       "tags": [
-        "service:ops-assistant",
+        "team:ai-agents",
         "slo_type:quality",
-        "team:ml",
         "evaluation:hallucination"
       ],
       "monitor_ids": []
     }
   ],
   "slo_metadata": {
-    "created_by": "ops-assistant-deployment",
-    "purpose": "Track application health, performance, governance, and LLM quality metrics",
+    "created_by": "ai-agents-fleet-deployment",
+    "purpose": "Track fleet-wide health, performance, governance, and LLM quality metrics across all AI agents tagged with team:ai-agents",
     "alert_configuration": {
       "availability_slo": {
         "error_budget_alerts": [
           {
             "threshold": 50,
-            "message": "50% of availability error budget consumed. Review recent errors and incidents."
+            "message": "50% of availability error budget consumed. Review recent errors and incidents across AI agent fleet."
           },
           {
             "threshold": 90,
-            "message": "90% of availability error budget consumed. CRITICAL - immediate action required."
+            "message": "90% of availability error budget consumed. CRITICAL - immediate action required for AI agent fleet."
           }
         ]
       },
@@ -127,11 +122,11 @@
         "error_budget_alerts": [
           {
             "threshold": 50,
-            "message": "50% of latency error budget consumed. Review slow traces and performance metrics."
+            "message": "50% of latency error budget consumed. Review slow traces across AI agent fleet."
           },
           {
             "threshold": 90,
-            "message": "90% of latency error budget consumed. CRITICAL - performance degradation."
+            "message": "90% of latency error budget consumed. CRITICAL - performance degradation in AI agent fleet."
           }
         ]
       },
@@ -139,11 +134,11 @@
         "error_budget_alerts": [
           {
             "threshold": 50,
-            "message": "50% of governance error budget consumed. Review agent behaviour and tool reliability."
+            "message": "50% of governance error budget consumed. Review agent behaviour and tool reliability across fleet."
           },
           {
             "threshold": 90,
-            "message": "90% of governance error budget consumed. CRITICAL - agent reliability issues."
+            "message": "90% of governance error budget consumed. CRITICAL - agent reliability issues in fleet."
           }
         ]
       },
@@ -151,11 +146,11 @@
         "error_budget_alerts": [
           {
             "threshold": 25,
-            "message": "25% of quality error budget consumed. Review hallucination rates and model behaviour."
+            "message": "25% of quality error budget consumed. Review hallucination rates across AI agent fleet."
           },
           {
             "threshold": 75,
-            "message": "75% of quality error budget consumed. CRITICAL - LLM quality degradation."
+            "message": "75% of quality error budget consumed. CRITICAL - LLM quality degradation in AI agent fleet."
           }
         ]
       }

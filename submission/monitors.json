@@ -1,38 +1,61 @@
 {
+  "description": "Governance monitors for AI agent fleet bounded autonomy controls",
   "monitors": [
     {
-      "name": "Ops Assistant - High P95 Latency",
+      "name": "AI Agent Fleet - Governance Escalation Rate",
       "type": "metric alert",
-      "query": "avg(last_5m):p95:trace.http.request.duration{service:ops-assistant} > 10",
-      "message": "## Summary\nThe P95 request latency for the Ops Assistant has exceeded 10 seconds.\n\n## Impact\n- Users experiencing slow response times\n- Service: {{service.name}}\n- Environment: {{env.name}}\n\n## What Triggered\n- Monitor: High P95 Latency\n- Window: Last 5 minutes\n- Threshold: P95 latency > 10 seconds\n- Current value: {{value}} seconds\n\n## Evidence\n- [View traces](https://app.ap1.datadoghq.com/apm/traces?query=service%3Aops-assistant)\n- [Latency dashboard](https://app.ap1.datadoghq.com/dashboard)\n\n## Likely Causes\n1. Gemini API latency spike\n2. Datadog API slow responses through MCP\n3. Tool execution timeouts\n4. Database or cache issues\n\n## Next Actions\n- [ ] Check Gemini API status\n- [ ] Review MCP tool latency breakdown\n- [ ] Investigate slow traces\n- [ ] Review resource utilisation\n\n@ops-oncall @incident-ops-assistant-latency",
+      "query": "sum(last_15m):sum:ai_agent.governance.escalation{team:ai-agents}.as_count() > 10",
+      "message": "## Summary\nHigh governance escalation rate across AI agent fleet.\n\n## Impact\n- Multiple agents requiring human intervention\n- Potential security or policy concerns\n- Team: {{team.name}}\n\n## What Triggered\n- Monitor: Fleet Governance Escalation Rate\n- Window: Last 15 minutes\n- Threshold: escalations > 10\n- Escalation count: {{value}}\n\n## Escalation Breakdown\nCheck by reason tag:\n- security_violation\n- step_budget_exceeded\n- model_budget_exceeded\n- tool_budget_exceeded\n- low_confidence\n- pii_detected\n\n## Next Actions\n- [ ] Review escalation traces by service\n- [ ] Check for common patterns\n- [ ] Verify governance thresholds\n\n@ops-oncall @security-team",
       "tags": [
-        "service:ops-assistant",
-        "monitor_type:latency",
-        "severity:warning"
+        "team:ai-agents",
+        "monitor_type:governance",
+        "severity:high"
       ],
       "options": {
         "notify_no_data": false,
-        "no_data_timeframe": 10,
         "evaluation_delay": 60,
         "thresholds": {
           "critical": 10,
-          "warning": 8
+          "warning": 5
         },
         "notify_audit": true,
-        "require_full_window": false,
         "include_tags": true
       },
-      "priority": 3
+      "priority": 2
     },
     {
-      "name": "Ops Assistant - Agent Step Budget Exceeded",
+      "name": "AI Agent Fleet - Security Violation Spike",
       "type": "metric alert",
-      "query": "sum(last_5m):sum:agent.step_budget_exceeded{service:ops-assistant}.as_count() > 0",
-      "message": "## Summary\nAgent runaway detected - step budget exceeded on one or more requests.\n\n## Impact\n- Requests consuming excessive compute resources\n- Potential cost overruns\n- Service: {{service.name}}\n\n## What Triggered\n- Monitor: Step Budget Exceeded\n- Window: Last 5 minutes\n- Threshold: count > 0\n- Exceeded count: {{value}}\n\n## Evidence\n- [View affected traces](https://app.ap1.datadoghq.com/apm/traces?query=service%3Aops-assistant%20%40agent.steps%3A%3E%3D8)\n- [Agent metrics dashboard](https://app.ap1.datadoghq.com/dashboard)\n\n## Likely Causes\n1. Complex user queries requiring many iterations\n2. Tool errors causing retry loops\n3. LLM producing invalid outputs repeatedly\n4. Prompt engineering issues\n\n## Next Actions\n- [ ] Review traces hitting step cap\n- [ ] Analyse LLM response quality\n- [ ] Check tool error rates\n- [ ] Review prompt templates\n- [ ] Consider adjusting step budget\n\n@ops-oncall @incident-ops-assistant-budget",
+      "query": "sum(last_5m):sum:ai_agent.governance.escalation{team:ai-agents,reason:security_violation}.as_count() > 3",
+      "message": "## Summary\nSecurity validation failures detected across AI agent fleet.\n\n## Impact\n- Potential prompt injection or attack attempts\n- Security policy enforcement active\n- Team: {{team.name}}\n\n## What Triggered\n- Monitor: Fleet Security Violation Spike\n- Window: Last 5 minutes\n- Threshold: violations > 3\n- Violation count: {{value}}\n\n## Next Actions\n- [ ] Review blocked requests immediately\n- [ ] Check for attack patterns\n- [ ] Verify security validator rules\n\n@ops-oncall @security-team",
       "tags": [
-        "service:ops-assistant",
+        "team:ai-agents",
         "monitor_type:governance",
-        "severity:warning"
+        "monitor_type:security",
+        "severity:critical"
+      ],
+      "options": {
+        "notify_no_data": false,
+        "evaluation_delay": 30,
+        "thresholds": {
+          "critical": 3,
+          "warning": 1
+        },
+        "notify_audit": true,
+        "include_tags": true
+      },
+      "priority": 1
+    },
+    {
+      "name": "AI Agent Fleet - PII Detection",
+      "type": "metric alert",
+      "query": "sum(last_15m):sum:ai_agent.governance.escalation{team:ai-agents,reason:pii_detected}.as_count() > 0",
+      "message": "## Summary\nPII detected in user input to AI agents.\n\n## Impact\n- Personal data being submitted to agents\n- Privacy compliance concerns\n- Team: {{team.name}}\n\n## What Triggered\n- Monitor: Fleet PII Detection\n- Window: Last 15 minutes\n- Threshold: detections > 0\n- Detection count: {{value}}\n\n## Next Actions\n- [ ] Review traces with PII detection\n- [ ] Verify PII was properly handled\n- [ ] Consider user education on data submission\n\n@ops-oncall @privacy-team",
+      "tags": [
+        "team:ai-agents",
+        "monitor_type:governance",
+        "monitor_type:privacy",
+        "severity:high"
       ],
       "options": {
         "notify_no_data": false,
@@ -43,37 +66,59 @@
         "notify_audit": true,
         "include_tags": true
       },
+      "priority": 2
+    },
+    {
+      "name": "AI Agent Fleet - Budget Utilisation High",
+      "type": "metric alert",
+      "query": "avg(last_15m):avg:ai_agent.governance.budget_utilisation{team:ai-agents} > 0.8",
+      "message": "## Summary\nHigh budget utilisation across AI agent fleet - agents frequently approaching limits.\n\n## Impact\n- Requests may be escalated before completion\n- Potential cost overruns\n- Team: {{team.name}}\n\n## What Triggered\n- Monitor: Fleet Budget Utilisation High\n- Window: Last 15 minutes\n- Threshold: utilisation > 80%\n- Current utilisation: {{value}}\n\n## Budget Types\nCheck budget_type tag:\n- step: Agent execution steps\n- model: LLM API calls\n- tool: External tool calls\n\n## Next Actions\n- [ ] Review high-utilisation traces\n- [ ] Consider budget limit adjustments\n- [ ] Optimise agent efficiency\n\n@ops-oncall",
+      "tags": [
+        "team:ai-agents",
+        "monitor_type:governance",
+        "monitor_type:cost",
+        "severity:warning"
+      ],
+      "options": {
+        "notify_no_data": false,
+        "evaluation_delay": 120,
+        "thresholds": {
+          "critical": 0.8,
+          "warning": 0.6
+        },
+        "include_tags": true
+      },
       "priority": 3
     },
     {
-      "name": "Ops Assistant - Tool Error Rate Spike",
+      "name": "AI Agent Fleet - Approval Queue Backlog",
       "type": "metric alert",
-      "query": "avg(last_5m):sum:agent.tool_error{service:ops-assistant}.as_rate() > 0.1",
-      "message": "## Summary\nTool reliability failure detected - error rate spike across MCP tools.\n\n## Impact\n- Degraded agent functionality\n- Failed Datadog queries\n- Incomplete triage results\n- Service: {{service.name}}\n- Tool: {{tool_name.name}}\n\n## What Triggered\n- Monitor: Tool Error Rate Spike\n- Window: Last 5 minutes\n- Threshold: error rate > 0.1 (10%)\n- Current rate: {{value}}\n\n## Evidence\n- [View tool errors](https://app.ap1.datadoghq.com/logs?query=service%3Aops-assistant%20event_type%3Atool_error)\n- [Tool performance dashboard](https://app.ap1.datadoghq.com/dashboard)\n- [Recent error traces](https://app.ap1.datadoghq.com/apm/traces?query=service%3Aops-assistant%20error%3Atrue)\n\n## Likely Causes\n1. Datadog API rate limiting\n2. MCP server connection issues\n3. Invalid API credentials\n4. Malformed tool parameters\n5. Network connectivity problems\n\n## Recommended Mitigations\n- Verify DD_API_KEY and DD_APP_KEY are valid\n- Check MCP server health endpoint\n- Review Datadog API rate limits\n- Implement exponential backoff\n- Check Cloud Run network configuration\n\n## Next Actions\n- [ ] Check MCP server logs\n- [ ] Verify Datadog API credentials\n- [ ] Review error distribution by tool\n- [ ] Test tool execution manually\n- [ ] Check network connectivity\n\n@ops-oncall @incident-ops-assistant-tool",
+      "query": "sum(last_5m):sum:ai_agent.governance.approval_pending{team:ai-agents}.as_count() > 20",
+      "message": "## Summary\nHigh number of pending approvals across AI agent fleet.\n\n## Impact\n- Delayed execution of agent actions\n- Users waiting for human approval\n- Team: {{team.name}}\n\n## What Triggered\n- Monitor: Fleet Approval Queue Backlog\n- Window: Last 5 minutes\n- Threshold: pending > 20\n- Pending count: {{value}}\n\n## Next Actions\n- [ ] Review pending approval queue\n- [ ] Increase approval team capacity\n- [ ] Consider auto-approval thresholds\n\n@ops-oncall @approval-team",
       "tags": [
-        "service:ops-assistant",
-        "monitor_type:tool_reliability",
-        "severity:high"
+        "team:ai-agents",
+        "monitor_type:governance",
+        "severity:warning"
       ],
       "options": {
         "notify_no_data": false,
         "evaluation_delay": 60,
         "thresholds": {
-          "critical": 0.1,
-          "warning": 0.05
+          "critical": 20,
+          "warning": 10
         },
-        "notify_audit": true,
         "include_tags": true
       },
-      "priority": 2
+      "priority": 3
     },
     {
-      "name": "Ops Assistant - Quality Degradation",
+      "name": "AI Agent Fleet - Low Quality Score",
       "type": "metric alert",
-      "query": "avg(last_15m):avg:llmobs.evaluation.ragas_faithfulness{service:ops-assistant} < 0.7",
-      "message": "## Summary\nLLM quality degradation detected - faithfulness score below acceptable threshold.\n\n## Impact\n- Reduced accuracy of triage results\n- Potential hallucinations in responses\n- User trust degradation\n- Service: {{service.name}}\n\n## What Triggered\n- Monitor: Quality Degradation\n- Window: Last 15 minutes\n- Threshold: RAGAS faithfulness < 0.7\n- Current score: {{value}}\n\n## Evidence\n- [Lowest quality traces](https://app.ap1.datadoghq.com/apm/traces?query=service%3Aops-assistant%20%40llmobs.evaluation.ragas_faithfulness%3A%3C0.7)\n- [Quality evaluation dashboard](https://app.ap1.datadoghq.com/dashboard)\n- [Hallucination rate graph](https://app.ap1.datadoghq.com/dashboard)\n\n## Quality Context\n- Faithfulness score: {{value}}\n- Baseline (1h ago): [link to metric]\n- Hallucination rate: [link to metric]\n- Topic relevancy: [link to metric]\n\n## Likely Causes\n1. Gemini model behaviour drift\n2. Prompt template regression\n3. Context quality degradation\n4. Tool failures affecting input quality\n5. Model version change\n\n## Next Actions\n- [ ] Review top 5 lowest quality traces\n- [ ] Compare prompts to baseline\n- [ ] Check Gemini model version\n- [ ] Analyse context retrieval quality\n- [ ] Review recent prompt changes\n- [ ] Consider rollback if recent deploy\n\n@ops-oncall @ml-team @incident-ops-assistant-quality",
+      "query": "avg(last_15m):avg:ai_agent.quality_score{team:ai-agents,score_type:code_quality} < 0.7",
+      "message": "## Summary\nLow quality scores detected from LLM-as-judge evaluation.\n\n## Impact\n- Generated content may require review\n- Potential accuracy or safety concerns\n- Team: {{team.name}}\n\n## What Triggered\n- Monitor: Fleet Low Quality Score\n- Window: Last 15 minutes\n- Threshold: quality score < 0.7\n- Current score: {{value}}\n\n## Score Types\nCheck score_type tag:\n- code_quality: Overall code quality\n- correctness_score: Functional correctness\n- safety_score: Safety compliance\n\n## Next Actions\n- [ ] Review low-quality traces\n- [ ] Check LLM model performance\n- [ ] Verify prompt templates\n\n@ops-oncall @ml-team",
       "tags": [
-        "service:ops-assistant",
+        "team:ai-agents",
+        "monitor_type:governance",
         "monitor_type:quality",
         "severity:high"
       ],
@@ -84,98 +129,9 @@
           "critical": 0.7,
           "warning": 0.75
         },
-        "notify_audit": true,
         "include_tags": true
       },
       "priority": 2
-    },
-    {
-      "name": "Ops Assistant - Hallucination Rate High",
-      "type": "metric alert",
-      "query": "avg(last_15m):sum:llmobs.evaluation.hallucination.fail{service:ops-assistant}.as_count() / sum:llmobs.evaluation.hallucination.total{service:ops-assistant}.as_count() * 100 > 10",
-      "message": "## Summary\nHallucination rate exceeds 10% - LLM producing ungrounded responses.\n\n## Impact\n- Users receiving inaccurate information\n- Potential incorrect triage decisions\n- Service credibility at risk\n\n## What Triggered\n- Monitor: Hallucination Rate High\n- Window: Last 15 minutes\n- Threshold: hallucination rate > 10%\n- Current rate: {{value}}%\n\n## Evidence\n- [Hallucinated responses](https://app.ap1.datadoghq.com/apm/traces?query=service%3Aops-assistant%20%40llmobs.evaluation.hallucination%3Afail)\n- [Quality dashboard](https://app.ap1.datadoghq.com/dashboard)\n\n## Next Actions\n- [ ] Review hallucinated traces\n- [ ] Check context retrieval quality\n- [ ] Verify prompt grounding instructions\n- [ ] Consider increasing temperature penalties\n\n@ops-oncall @ml-team @incident-ops-assistant-quality",
-      "tags": [
-        "service:ops-assistant",
-        "monitor_type:quality",
-        "severity:critical"
-      ],
-      "options": {
-        "notify_no_data": false,
-        "evaluation_delay": 120,
-        "thresholds": {
-          "critical": 10,
-          "warning": 5
-        },
-        "include_tags": true
-      },
-      "priority": 1
-    },
-    {
-      "name": "Ops Assistant - PII Detection Alert",
-      "type": "log alert",
-      "query": "logs(\"service:ops-assistant @sensitive_data_scanner.pii_detected:*\").index(\"*\").rollup(\"count\").last(\"5m\") > 0",
-      "message": "## SECURITY ALERT\nPII detected in LLM interactions - immediate attention required.\n\n## Impact\n- **CRITICAL SECURITY ISSUE**\n- Potential data privacy violation\n- Compliance risk\n- Service: {{service.name}}\n- PII Type: {{pii_type.name}}\n\n## What Triggered\n- Monitor: PII Detection\n- Window: Last 5 minutes\n- Threshold: PII detected count > 0\n- Detection count: {{value}}\n\n## Evidence\n- [PII detection logs](https://app.ap1.datadoghq.com/logs?query=service%3Aops-assistant%20%40sensitive_data_scanner.pii_detected%3A*)\n- Trace ID: [in logs]\n- PII type: [from sensitive data scanner]\n- Redacted sample: [from logs]\n\n## Immediate Actions Required\n- [ ] Review affected traces immediately\n- [ ] Verify data scanner configuration\n- [ ] Check if PII was logged/stored\n- [ ] Assess compliance impact\n- [ ] Document incident\n- [ ] Notify security team\n\n@security-team @ops-oncall @incident-ops-assistant-security",
-      "tags": [
-        "service:ops-assistant",
-        "monitor_type:security",
-        "severity:critical",
-        "compliance:pii"
-      ],
-      "options": {
-        "notify_no_data": false,
-        "evaluation_delay": 0,
-        "thresholds": {
-          "critical": 0
-        },
-        "notify_audit": true,
-        "include_tags": true,
-        "enable_logs_sample": true
-      },
-      "priority": 1
-    },
-    {
-      "name": "Ops Assistant - MCP Server Connection Issues",
-      "type": "metric alert",
-      "query": "sum(last_5m):sum:trace.llmobs.span.error{mcp.session.initialize,service:ops-assistant}.as_count() > 5",
-      "message": "## Summary\nMCP Server connection issues detected - tool infrastructure degraded.\n\n## Impact\n- All Datadog query tools unavailable\n- Agent cannot access metrics, logs, or traces\n- Service functionality severely limited\n- Service: {{service.name}}\n- MCP Server: {{mcp.server.name}}\n\n## What Triggered\n- Monitor: MCP Server Health\n- Window: Last 5 minutes\n- Threshold: connection errors > 5\n- Error count: {{value}}\n\n## Evidence\n- [MCP connection traces](https://app.ap1.datadoghq.com/apm/traces?query=service%3Aops-assistant%20span_name%3Amcp.session.initialize%20error%3Atrue)\n- [MCP server logs](https://app.ap1.datadoghq.com/logs?query=service%3Adatadog-mcp-server)\n- Error distribution by type: [link]\n\n## MCP Server Context\n- Server name: {{mcp.server.name}}\n- Transport: {{mcp.transport}}\n- Error types: {{error.type}}\n- Recent errors: [trace links]\n\n## Likely Causes\n1. MCP server Cloud Run instance down\n2. Network connectivity issues\n3. Authentication failure (service account)\n4. MCP server deployment failed\n5. Resource exhaustion on server\n\n## Recommended Mitigations\n1. Check MCP server Cloud Run status\n2. Verify service-to-service IAM permissions\n3. Restart MCP server instance\n4. Check DD_API_KEY and DD_APP_KEY secrets\n5. Review Cloud Run logs for MCP server\n6. Verify network configuration\n\n## Next Actions\n- [ ] Check MCP server Cloud Run status: `gcloud run services describe datadog-mcp-server`\n- [ ] Review MCP server logs\n- [ ] Verify IAM bindings\n- [ ] Test MCP health endpoint: `curl $MCP_SERVER_URL/mcp`\n- [ ] Check recent deployments\n- [ ] Restart if necessary\n\n@ops-oncall @sre-team @incident-ops-assistant-mcp",
-      "tags": [
-        "service:ops-assistant",
-        "monitor_type:mcp_health",
-        "severity:critical",
-        "component:mcp-server"
-      ],
-      "options": {
-        "notify_no_data": false,
-        "evaluation_delay": 60,
-        "thresholds": {
-          "critical": 5,
-          "warning": 3
-        },
-        "notify_audit": true,
-        "include_tags": true
-      },
-      "priority": 1
-    },
-    {
-      "name": "Ops Assistant - Token Budget Spike",
-      "type": "metric alert",
-      "query": "avg(last_15m):avg:llmobs.tokens.total{service:ops-assistant} by {request_type} > 50000",
-      "message": "## Summary\nToken usage spike detected - potential cost overrun.\n\n## Impact\n- Higher than expected API costs\n- Service: {{service.name}}\n- Request type: {{request_type.name}}\n\n## What Triggered\n- Monitor: Token Budget Spike\n- Window: Last 15 minutes\n- Threshold: average tokens > 50,000 per request\n- Current average: {{value}} tokens\n\n## Evidence\n- [High token traces](https://app.ap1.datadoghq.com/apm/traces?query=service%3Aops-assistant%20%40llmobs.tokens.total%3A%3E50000)\n- [Cost dashboard](https://app.ap1.datadoghq.com/dashboard)\n\n## Likely Causes\n1. Large context windows\n2. Excessive tool outputs\n3. Verbose prompts\n4. Repeated retry loops\n\n## Next Actions\n- [ ] Review high-token traces\n- [ ] Check prompt template lengths\n- [ ] Analyse tool output sizes\n- [ ] Consider context truncation\n- [ ] Review token budget policies\n\n@ops-oncall @incident-ops-assistant-cost",
-      "tags": [
-        "service:ops-assistant",
-        "monitor_type:cost",
-        "severity:warning"
-      ],
-      "options": {
-        "notify_no_data": false,
-        "evaluation_delay": 120,
-        "thresholds": {
-          "critical": 50000,
-          "warning": 30000
-        },
-        "include_tags": true
-      },
-      "priority": 3
     }
   ]
 }
