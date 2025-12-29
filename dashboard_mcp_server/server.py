@@ -45,6 +45,10 @@ async def health_check(request: Request) -> JSONResponse:
     })
 
 
+# Create ASGI app for uvicorn (after all routes registered)
+app = mcp.http_app()
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8084))
     asyncio.run(mcp.run_async(

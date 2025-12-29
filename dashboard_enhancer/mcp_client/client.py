@@ -1,0 +1,186 @@
+"""Dashboard MCP client wrapper."""
+
+import json
+from typing import Any
+
+import httpx
+import structlog
+from fastmcp import Client
+
+from ..config import settings
+
+logger = structlog.get_logger()
+
+
+async def _get_identity_token(audience: str) -> str | None:
+    """Fetch identity token from GCP metadata server for service-to-service auth.
+
+    Args:
+        audience: The target audience URL (the MCP server URL).
+
+    Returns:
+        Identity token string if on GCP, None otherwise.
+    """
+    metadata_url = (
+        f"http://metadata.google.internal/computeMetadata/v1/"
+        f"instance/service-accounts/default/identity?audience={audience}"
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                metadata_url,
+                headers={"Metadata-Flavor": "Google"},
+                timeout=5.0,
+            )
+            if response.status_code == 200:
+                return response.text
+    except httpx.RequestError:
+        pass
+    return None
+
+
+def _extract_result(result: Any) -> dict[str, Any]:
+    """Extract dictionary from CallToolResult.
+
+    Args:
+        result: The CallToolResult from MCP call_tool.
+
+    Returns:
+        Dictionary extracted from the result content.
+    """
+    if hasattr(result, "content") and result.content:
+        for item in result.content:
+            if hasattr(item, "text"):
+                try:
+                    return json.loads(item.text)
+                except json.JSONDecodeError:
+                    return {"raw_text": item.text}
+    if isinstance(result, dict):
+        return result
+    return {"error": "Could not extract result", "raw": str(result)}
+
+
+class DashboardMCPClient:
+    """Client for Dashboard MCP Server operations."""
+
+    def __init__(self) -> None:
+        """Initialise MCP client with server URL from settings."""
+        self.server_url = settings.dashboard_mcp_url
+        self._client: Client | None = None
+
+    async def __aenter__(self) -> "DashboardMCPClient":
+        """Enter async context and connect to MCP server.
+
+        Returns:
+            DashboardMCPClient: The connected client instance.
+        """
+        base_url = self.server_url.rsplit("/mcp", 1)[0]
+        id_token = await _get_identity_token(base_url)
+
+        if id_token:
+            self._client = Client(self.server_url, auth=id_token)
+            logger.info("dashboard_mcp_client_connected_with_auth", server_url=self.server_url)
+        else:
+            self._client = Client(self.server_url)
+            logger.info("dashboard_mcp_client_connected", server_url=self.server_url)
+
+        await self._client.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit async context and disconnect from MCP server.
+
+        Args:
+            exc_type: Exception type if an exception was raised.
+            exc_val: Exception value if an exception was raised.
+            exc_tb: Exception traceback if an exception was raised.
+        """
+        if self._client:
+            await self._client.__aexit__(exc_type, exc_val, exc_tb)
+            logger.info("dashboard_mcp_client_disconnected")
+
+    async def add_widget_group(
+        self,
+        dashboard_id: str,
+        group_title: str,
+        widgets: list[dict],
+        service: str,
+    ) -> dict[str, Any]:
+        """Add a widget group to the dashboard.
+
+        Args:
+            dashboard_id: Dashboard ID to update.
+            group_title: Title for the new group.
+            widgets: List of widget definitions.
+            service: Service name.
+
+        Returns:
+            Result from MCP server.
+        """
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        logger.info(
+            "adding_widget_group",
+            dashboard_id=dashboard_id,
+            group_title=group_title,
+            widgets_count=len(widgets),
+        )
+
+        result = await self._client.call_tool(
+            "add_widget_group_to_dashboard",
+            {
+                "dashboard_id": dashboard_id,
+                "group_title": group_title,
+                "widgets_json": json.dumps(widgets),
+                "service": service,
+            },
+        )
+
+        return _extract_result(result)
+
+    async def get_dashboard(self, dashboard_id: str) -> dict[str, Any]:
+        """Get a dashboard by ID.
+
+        Args:
+            dashboard_id: The dashboard ID to retrieve.
+
+        Returns:
+            Dashboard definition.
+        """
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        result = await self._client.call_tool(
+            "get_dashboard",
+            {"dashboard_id": dashboard_id},
+        )
+
+        return _extract_result(result)
+
+    async def update_dashboard(
+        self,
+        dashboard_id: str,
+        dashboard_json: str,
+    ) -> dict[str, Any]:
+        """Update an existing dashboard.
+
+        Args:
+            dashboard_id: The dashboard ID to update.
+            dashboard_json: Complete dashboard definition as JSON string.
+
+        Returns:
+            Updated dashboard info.
+        """
+        if not self._client:
+            raise RuntimeError("Client not connected")
+
+        result = await self._client.call_tool(
+            "update_dashboard",
+            {
+                "dashboard_id": dashboard_id,
+                "dashboard_json": dashboard_json,
+            },
+        )
+
+        return _extract_result(result)
