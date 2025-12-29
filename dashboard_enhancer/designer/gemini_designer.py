@@ -69,11 +69,9 @@ Output valid JSON only. No markdown, no explanation."""
             evaluation_labels_count=len(evaluation_labels or []),
         )
 
-        base_widgets = get_base_widgets(agent_profile.agent_type)
         prompt = self._build_prompt(
             agent_profile,
             telemetry_profile,
-            base_widgets,
             provisioned_metrics or [],
             evaluation_labels or [],
         )
@@ -88,7 +86,7 @@ Output valid JSON only. No markdown, no explanation."""
                 ),
             )
 
-            widgets = self._parse_response(response.text)
+            widgets = self._parse_response(response.text or "")
 
             logger.info(
                 "widgets_designed",
@@ -100,54 +98,57 @@ Output valid JSON only. No markdown, no explanation."""
 
         except Exception as e:
             logger.error("widget_design_failed", error=str(e))
+            base_widgets = get_base_widgets(agent_profile.agent_type)
             return self._apply_base_widgets(base_widgets, agent_profile)
 
     def _build_prompt(
         self,
         agent_profile: AgentProfile,
         telemetry_profile: TelemetryProfile,
-        base_widgets: list[dict],
+        provisioned_metrics: list[dict],
+        evaluation_labels: list[str],
     ) -> str:
         """Build the prompt for Gemini.
 
         Args:
             agent_profile: Profile of the agent.
             telemetry_profile: Available telemetry.
-            base_widgets: Base widget templates.
+            provisioned_metrics: Metrics that were provisioned.
+            evaluation_labels: Available evaluation labels.
 
         Returns:
             Formatted prompt string.
         """
-        return f"""Design 4-6 dashboard widgets for this AI agent:
+        return f"""Design 4-8 dashboard widgets for this AI agent:
 
 ## Agent Profile
 - Service: {agent_profile.service_name}
 - Type: {agent_profile.agent_type}
 - Domain: {agent_profile.domain}
 - Description: {agent_profile.description}
-- Primary Actions: {', '.join(agent_profile.primary_actions)}
-- Output Types: {', '.join(agent_profile.output_types)}
 - LLM Provider: {agent_profile.llm_provider}
 - Framework: {agent_profile.framework}
 
-## Available Telemetry
-- Metrics: {', '.join(telemetry_profile.metrics_found)}
-- Trace Operations: {', '.join(telemetry_profile.trace_operations)}
-- Has LLM Observability: {telemetry_profile.has_llm_obs}
-- Has Custom Metrics: {telemetry_profile.has_custom_metrics}
+## Provisioned Metrics (use these exact metric IDs)
+{json.dumps(provisioned_metrics, indent=2)}
 
-## Base Widgets (customise these for the domain)
-{json.dumps(base_widgets, indent=2)}
+## Available Evaluations (query as: avg:llmobs.evaluation.<label>{{ml_app:{agent_profile.service_name}}})
+{json.dumps(evaluation_labels, indent=2)}
+
+## Automatic Trace Metrics (always available)
+- trace.{agent_profile.framework.lower()}.request.hits{{service:{agent_profile.service_name}}}
+- trace.{agent_profile.framework.lower()}.request.errors{{service:{agent_profile.service_name}}}
+- p95:trace.{agent_profile.framework.lower()}.request{{service:{agent_profile.service_name}}}
 
 ## Requirements
-1. Generate 4-6 widgets as a JSON array
-2. Each widget must have: type, title, query
-3. Titles must be domain-specific (e.g., "SAS Query Complexity" not "Request Latency")
-4. Queries must use the {{service:{agent_profile.service_name}}} filter
-5. Use only metrics from the Available Telemetry list
-6. Focus on insights unique to this agent's domain
+1. Generate 4-8 widgets as a JSON array
+2. Each widget must have: type, title, query, description
+3. Include at least one widget for each evaluation label
+4. Include widgets for LLM-specific metrics if available
+5. Titles must be domain-specific
+6. Use formulas where useful (e.g., error rate = errors / hits * 100)
 
-Return ONLY a JSON array of widget definitions, no other text."""
+Return ONLY a JSON array of widget definitions."""
 
     def _parse_response(self, response_text: str) -> list[dict]:
         """Parse Gemini response to extract widgets.
