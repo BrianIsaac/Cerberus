@@ -1,4 +1,7 @@
-"""Enhanced workflow for Observability Provisioning Agent."""
+"""Enhanced workflow for Observability Provisioning Agent.
+
+Provides both legacy workflow and new two-phase personalised observability flow.
+"""
 
 from pathlib import Path
 from typing import Any
@@ -9,10 +12,12 @@ from ddtrace.llmobs.decorators import workflow
 from shared.governance import BudgetTracker
 
 from .analyzer import AgentProfile, CodeAnalyzer, TelemetryDiscoverer
-from .designer import GeminiWidgetDesigner
+from .designer import GeminiWidgetDesigner, PersonalisedWidgetDesigner
+from .discovery import ServiceDiscovery, ServiceDiscoveryAnalyzer
 from .evaluator import DomainEvaluator, get_evaluations_for_agent_type
 from .mcp_client import DashboardMCPClient
 from .models import AgentProfileInput, WidgetPreview
+from .proposer import MetricProposer, ProposedMetric
 from .provisioner import MetricsProvisioner
 
 logger = structlog.get_logger()
@@ -137,21 +142,14 @@ async def enhance_dashboard(
     }
 
     # Step 4: Provision span-based metrics
+    # NOTE: Legacy provisioning is disabled. Use analyze_and_preview() and
+    # provision_and_apply() for personalised metrics provisioning.
     provisioned_metrics: list[dict] = []
     if provision_metrics:
         budget_tracker.increment_step()
-        provisioner = MetricsProvisioner(agent_profile)
-        provision_result = await provisioner.provision_metrics()
-        result["provisioned_metrics"] = provision_result.get("metrics", [])
-        provisioned_metrics = [
-            {"id": m["id"], "status": m["status"]}
-            for m in result["provisioned_metrics"]
-            if m["status"] in ("created", "exists")
-        ]
-        logger.info(
-            "metrics_provisioned",
-            created=provision_result.get("created", 0),
-            existing=provision_result.get("existing", 0),
+        logger.warning(
+            "legacy_provisioning_skipped",
+            message="Use analyze_and_preview() for personalised metrics",
         )
 
     # Step 5: Run evaluations on existing spans
@@ -161,7 +159,7 @@ async def enhance_dashboard(
         budget_tracker.increment_model_call()  # Evaluation uses Gemini
 
         evaluator = DomainEvaluator(agent_profile)
-        eval_result = await evaluator.run_evaluations(hours_back=1, limit=20)
+        eval_result = await evaluator.run_evaluations(hours_back=1, limit=20)  # type: ignore[reportCallIssue]
         result["evaluation_results"] = eval_result
 
         if eval_result.get("success"):
@@ -266,3 +264,250 @@ async def apply_enhancement(
         "widgets_added": len(widgets),
         "dashboard_url": result.get("url"),
     }
+
+
+# =============================================================================
+# Two-Phase Personalised Observability Flow
+# =============================================================================
+
+
+@workflow
+async def analyze_and_preview(
+    service: str,
+    domain: str,
+    agent_type: str,
+    agent_source: Path | str | None = None,
+    llm_provider: str = "unknown",
+    framework: str = "unknown",
+) -> dict[str, Any]:
+    """Analyse service and preview personalised metrics/widgets.
+
+    This phase does NOT create any resources. It returns a preview of what
+    will be created if the user approves.
+
+    Args:
+        service: Service name in Datadog.
+        domain: Service domain (sas, ops, etc.).
+        agent_type: Agent type (generator, assistant, etc.).
+        agent_source: Optional path or GitHub URL to source.
+        llm_provider: LLM provider hint.
+        framework: Framework hint.
+
+    Returns:
+        Preview of proposed metrics and widgets.
+    """
+    logger.info(
+        "analyze_started",
+        service=service,
+        domain=domain,
+    )
+
+    # Step 1: Run hybrid discovery
+    analyzer = ServiceDiscoveryAnalyzer(
+        service=service,
+        domain=domain,
+        agent_type=agent_type,
+        agent_source=agent_source,
+        llm_provider=llm_provider,
+        framework=framework,
+    )
+    discovery = await analyzer.discover()  # type: ignore[reportGeneralTypeIssues]
+
+    # Step 2: Check LLMObs status
+    async with DashboardMCPClient() as mcp:
+        llmobs_status = await mcp.check_llm_obs_enabled(service)
+
+    # Step 3: Propose personalised metrics
+    proposer = MetricProposer()
+    proposed_metrics = await proposer.propose_metrics(discovery)
+
+    # Step 4: Preview what metrics would look like after provisioning
+    metrics_preview = []
+    for proposed in proposed_metrics:
+        queries = proposed.generate_queries(service)
+        metrics_preview.append({
+            "id": proposed.metric_id,
+            "status": "pending",
+            "metric_type": proposed.aggregation_type,
+            "description": proposed.description,
+            "queries": queries,
+            "widget_config": {
+                "title": proposed.widget_title,
+                "type": proposed.widget_type,
+                "description": proposed.description,
+                "rationale": proposed.rationale,
+            },
+        })
+
+    # Step 5: Preview widget group
+    designer = PersonalisedWidgetDesigner()
+    widget_preview = await designer.design_widget_group(
+        discovery,
+        metrics_preview,
+    )
+
+    return {
+        "service": service,
+        "discovery": {
+            "domain": discovery.domain,
+            "agent_type": discovery.agent_type,
+            "llm_provider": discovery.llm_provider,
+            "framework": discovery.framework,
+            "operations_found": len(discovery.discovered_operations),
+            "existing_metrics": len(discovery.discovered_metrics),
+        },
+        "llmobs_status": llmobs_status,
+        "proposed_metrics": metrics_preview,
+        "widget_preview": widget_preview,
+        "_discovery": discovery,
+        "_proposed_metrics": proposed_metrics,
+    }
+
+
+@workflow
+async def provision_and_apply(
+    preview_result: dict[str, Any],
+    dashboard_id: str,
+    budget_tracker: BudgetTracker,
+) -> dict[str, Any]:
+    """Provision metrics and apply widgets to dashboard.
+
+    This phase creates resources in Datadog.
+
+    Args:
+        preview_result: Result from analyze_and_preview.
+        dashboard_id: Dashboard ID to update.
+        budget_tracker: Budget tracker for governance.
+
+    Returns:
+        Provisioning results.
+    """
+    service = preview_result["service"]
+    discovery: ServiceDiscovery = preview_result["_discovery"]
+    proposed_metrics: list[ProposedMetric] = preview_result["_proposed_metrics"]
+
+    logger.info(
+        "provision_started",
+        service=service,
+        metrics_count=len(proposed_metrics),
+    )
+
+    # Step 1: Provision metrics
+    budget_tracker.increment_step()
+    provisioner = MetricsProvisioner(service)
+    provision_result = await provisioner.provision_metrics(proposed_metrics)  # type: ignore[reportCallIssue]
+
+    # Track created metrics for potential rollback
+    created_metric_ids = [
+        m["id"] for m in provision_result["metrics"]
+        if m["status"] == "created"
+    ]
+
+    # Step 2: Design final widget group with actual queries
+    budget_tracker.increment_step()
+    budget_tracker.increment_model_call()
+
+    designer = PersonalisedWidgetDesigner()
+    widget_group = await designer.design_widget_group(
+        discovery,
+        provision_result["metrics"],
+    )
+
+    # Step 3: Apply widget group to dashboard
+    budget_tracker.increment_step()
+
+    apply_result = await apply_widget_group(
+        dashboard_id=dashboard_id,
+        group_title=widget_group["group_title"],
+        widgets=widget_group["widgets"],
+        service=service,
+    )
+
+    return {
+        "service": service,
+        "provisioned_metrics": provision_result["metrics"],
+        "metrics_created": provision_result["created"],
+        "metrics_existing": provision_result["existing"],
+        "metrics_failed": provision_result["failed"],
+        "widget_group": widget_group,
+        "dashboard_url": apply_result.get("dashboard_url"),
+        "created_metric_ids": created_metric_ids,
+    }
+
+
+async def apply_widget_group(
+    dashboard_id: str,
+    group_title: str,
+    widgets: list[dict[str, Any]],
+    service: str,
+) -> dict[str, Any]:
+    """Apply widget group to dashboard.
+
+    Args:
+        dashboard_id: Dashboard ID.
+        group_title: Title for the widget group.
+        widgets: Widget definitions.
+        service: Service name.
+
+    Returns:
+        Apply result with dashboard URL.
+    """
+    logger.info(
+        "applying_widget_group",
+        dashboard_id=dashboard_id,
+        group_title=group_title,
+        widgets_count=len(widgets),
+    )
+
+    # Convert to Datadog widget format
+    full_widgets = []
+    for i, w in enumerate(widgets):
+        widget_def: dict[str, Any] = {
+            "id": 2000 + i,
+            "definition": {
+                "type": w.get("type", "timeseries"),
+                "title": w.get("title", "Untitled"),
+                "requests": [{"q": w.get("query", "")}],
+            },
+        }
+        if w.get("type") == "timeseries":
+            widget_def["definition"]["requests"][0]["display_type"] = "line"
+        full_widgets.append(widget_def)
+
+    # Add to dashboard via MCP
+    async with DashboardMCPClient() as mcp:
+        result = await mcp.add_widget_group(
+            dashboard_id=dashboard_id,
+            group_title=group_title,
+            widgets=full_widgets,
+            service=service,
+        )
+
+    return {
+        "dashboard_id": result.get("id"),
+        "group_id": result.get("group_id"),
+        "dashboard_url": result.get("url"),
+    }
+
+
+async def rollback_provisioning(
+    service: str,
+    created_metric_ids: list[str],
+) -> dict[str, Any]:
+    """Rollback created metrics.
+
+    Args:
+        service: Service name.
+        created_metric_ids: Metrics to delete.
+
+    Returns:
+        Rollback result.
+    """
+    logger.info(
+        "rollback_started",
+        service=service,
+        metrics_count=len(created_metric_ids),
+    )
+
+    provisioner = MetricsProvisioner(service)
+    return await provisioner.cleanup_metrics(created_metric_ids)

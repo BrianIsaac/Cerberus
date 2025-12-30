@@ -287,7 +287,7 @@ Return ONLY the JSON, no explanation.'''
         """
         valid_metrics = [
             m for m in provisioned_metrics
-            if m.get("status") in ("created", "exists")
+            if m.get("status") in ("created", "exists", "pending")
         ]
 
         if not valid_metrics:
