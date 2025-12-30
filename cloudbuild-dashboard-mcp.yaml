@@ -54,7 +54,7 @@ steps:
       - '--min-instances=1'
       - '--max-instances=5'
       - '--concurrency=40'
-      - '--timeout=120'
+      - '--timeout=300'
       - '--set-env-vars=DD_SERVICE=dashboard-mcp-server'
       - '--set-env-vars=DD_ENV=production'
       - '--set-env-vars=DD_SITE=ap1.datadoghq.com'
