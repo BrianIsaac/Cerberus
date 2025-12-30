@@ -2,6 +2,81 @@
 
 This guide explains how to add a new AI agent to the observability platform, ensuring consistent telemetry, dashboard visibility, and automated monitoring.
 
+## Quick Start: Automated Onboarding with Dashboard Enhancement Agent
+
+The **Dashboard Enhancement Agent** provides automated, AI-driven onboarding that analyses your agent's code and telemetry to create personalised observability:
+
+### Using the Web UI
+
+1. Navigate to https://dashboard-enhancer-ui-i4ney2dwya-uc.a.run.app
+2. Enter your service name (e.g., `my-new-agent`)
+3. Optionally provide:
+   - **Agent Directory**: Local path to agent code (e.g., `my_agent/`)
+   - **GitHub URL**: Link to agent code on GitHub
+   - **Agent Profile**: Domain, agent type, LLM provider, and framework
+4. Click **Analyse Service** to discover operations and propose metrics
+5. Review the proposed metrics and widget preview
+6. Click **Provision & Apply** to create metrics and add widgets to the dashboard
+
+### Using the API
+
+```bash
+# Phase 1: Analyse and preview (no resources created)
+curl -X POST https://dashboard-enhancer-api-i4ney2dwya-uc.a.run.app/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service": "my-new-agent",
+    "agent_profile": {
+      "domain": "research",
+      "agent_type": "assistant",
+      "llm_provider": "gemini",
+      "framework": "langgraph"
+    }
+  }'
+
+# Phase 2: Provision metrics and apply widgets (uses trace_id from Phase 1)
+curl -X POST https://dashboard-enhancer-api-i4ney2dwya-uc.a.run.app/provision/{trace_id}
+```
+
+### What the Dashboard Enhancement Agent Does
+
+1. **Service Discovery**: Analyses code and telemetry to find:
+   - Workflow operations (business logic functions)
+   - LLM call operations (model invocations)
+   - Tool/MCP operations (external tool calls)
+   - Existing span-based metrics
+
+2. **Metric Proposal**: Uses Gemini to propose domain-specific metrics:
+   - Focuses on business outcomes, not infrastructure
+   - Generates Datadog-compatible query templates
+   - Suggests appropriate widget types
+
+3. **Metrics Provisioning**: Creates span-based metrics in Datadog:
+   - Skips metrics that already exist
+   - Supports count and distribution aggregations
+   - Configures group-by tags
+
+4. **Widget Group Creation**: Adds a personalised widget group to the dashboard:
+   - Designs 4-6 widgets for the most valuable metrics
+   - Uses domain-specific titles
+   - Inserts before "Operations & Actionable Items" section
+
+### Rollback
+
+If you need to undo provisioning:
+
+```bash
+curl -X DELETE https://dashboard-enhancer-api-i4ney2dwya-uc.a.run.app/rollback/{trace_id}
+```
+
+This deletes created metrics (but does not remove widgets from the dashboard).
+
+---
+
+## Manual Onboarding
+
+For more control over the onboarding process, follow the manual steps below.
+
 ## Overview
 
 The platform uses a three-layer telemetry architecture:

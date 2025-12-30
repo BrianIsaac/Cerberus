@@ -81,6 +81,9 @@ What sets this solution apart is the **scalable, self-referential observability 
 | **Ops Assistant Frontend** | https://ops-assistant-frontend-i4ney2dwya-uc.a.run.app | Chat UI for incident triage |
 | **SAS Generator API** | https://sas-generator-api-i4ney2dwya-uc.a.run.app | Backend code generation API |
 | **SAS Query Generator UI** | https://sas-query-generator-i4ney2dwya-uc.a.run.app | Streamlit UI for SAS code generation |
+| **Dashboard Enhancer API** | https://dashboard-enhancer-api-i4ney2dwya-uc.a.run.app | Automated observability provisioning |
+| **Dashboard Enhancer UI** | https://dashboard-enhancer-ui-i4ney2dwya-uc.a.run.app | Web UI for agent onboarding |
+| **Dashboard MCP Server** | https://dashboard-mcp-server-i4ney2dwya-uc.a.run.app | MCP tools for Datadog API operations |
 
 ## Datadog Organisation
 
@@ -328,6 +331,15 @@ uv run uvicorn sas_generator.main:app --host 0.0.0.0 --port 8082
 
 # Terminal 5: Start SAS Generator Frontend
 SAS_API_URL=http://localhost:8082 uv run streamlit run sas_generator/app.py --server.port=8502
+
+# Terminal 6: Start Dashboard MCP Server
+uv run python -m dashboard_mcp_server.server
+
+# Terminal 7: Start Dashboard Enhancer API
+DASHBOARD_MCP_SERVER_URL=http://localhost:8084/mcp uv run uvicorn dashboard_enhancer.main:app --host 0.0.0.0 --port 8083
+
+# Terminal 8: Start Dashboard Enhancer UI
+DASHBOARD_API_URL=http://localhost:8083 uv run streamlit run dashboard_enhancer/app.py --server.port=8503
 ```
 
 ### Running with Docker
@@ -339,6 +351,9 @@ docker build -f Dockerfile-ops-triage-agent -t ops-agent .
 docker build -f Dockerfile-ops-frontend -t ops-frontend .
 docker build -f Dockerfile-sas-generator-api -t sas-generator-api .
 docker build -f Dockerfile-sas-generator-ui -t sas-generator-ui .
+docker build -f Dockerfile-dashboard-mcp-server -t dashboard-mcp-server .
+docker build -f Dockerfile-dashboard-enhancer-api -t dashboard-enhancer-api .
+docker build -f Dockerfile-dashboard-enhancer-ui -t dashboard-enhancer-ui .
 
 # Run with environment variables
 docker run -p 8081:8080 --env-file .env ops-mcp-server
@@ -346,6 +361,9 @@ docker run -p 8080:8080 --env-file .env -e MCP_SERVER_URL=http://host.docker.int
 docker run -p 8501:8080 -e OPS_TRIAGE_AGENT_URL=http://host.docker.internal:8080 ops-frontend
 docker run -p 8082:8080 --env-file .env sas-generator-api
 docker run -p 8502:8080 -e SAS_API_URL=http://host.docker.internal:8082 sas-generator-ui
+docker run -p 8084:8080 --env-file .env dashboard-mcp-server
+docker run -p 8083:8080 --env-file .env -e DASHBOARD_MCP_SERVER_URL=http://host.docker.internal:8084/mcp dashboard-enhancer-api
+docker run -p 8503:8080 -e DASHBOARD_API_URL=http://host.docker.internal:8083 dashboard-enhancer-ui
 ```
 
 ### Deploy to Cloud Run
@@ -364,6 +382,14 @@ gcloud builds submit --config cloudbuild-sas-generator-api.yaml \
 # Deploy frontends
 gcloud builds submit --config cloudbuild-ops-frontend.yaml
 gcloud builds submit --config cloudbuild-sas-generator.yaml
+
+# Deploy Dashboard Enhancer services
+gcloud builds submit --config cloudbuild-dashboard-mcp.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
+gcloud builds submit --config cloudbuild-dashboard-enhancer-api.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
+gcloud builds submit --config cloudbuild-dashboard-enhancer-ui.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
 ```
 
 ## Traffic Generator
@@ -425,7 +451,29 @@ uv run python scripts/traffic_gen.py --service fleet --rps 0.5 --duration 60
 
 ## Onboarding New Agents
 
-To add a new AI agent to the platform, use the automated onboarding script:
+### Recommended: Dashboard Enhancement Agent
+
+The **Dashboard Enhancement Agent** provides AI-driven automated onboarding. It analyses your agent's code and telemetry to create personalised observability:
+
+```bash
+# Using the Web UI
+open https://dashboard-enhancer-ui-i4ney2dwya-uc.a.run.app
+
+# Or via API
+curl -X POST https://dashboard-enhancer-api-i4ney2dwya-uc.a.run.app/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"service": "my-new-agent", "agent_profile": {"domain": "research", "agent_type": "assistant"}}'
+```
+
+The Dashboard Enhancer:
+1. **Discovers** workflow operations, LLM calls, and tool invocations from code and telemetry
+2. **Proposes** domain-specific metrics using Gemini (not generic infrastructure metrics)
+3. **Provisions** span-based metrics in Datadog automatically
+4. **Designs** a personalised widget group and adds it to the fleet dashboard
+
+### Alternative: Script-Based Onboarding
+
+For manual control, use the onboarding script:
 
 ```bash
 python scripts/onboard_agent.py \
@@ -510,6 +558,26 @@ ops-assistant/
 ├── ops_assistant_frontend/     # Streamlit chat UI
 ├── sas_generator/              # SAS code generation agent
 ├── sas_mcp_server/             # SAS data tools MCP server
+│
+├── dashboard_enhancer/         # Automated observability provisioning agent
+│   ├── main.py                 # FastAPI with /analyze, /provision, /rollback
+│   ├── app.py                  # Streamlit UI for agent onboarding
+│   ├── workflow.py             # Two-phase workflow orchestration
+│   ├── discovery/              # Service discovery (code + telemetry analysis)
+│   ├── analyzer/               # Code analysis for operation extraction
+│   ├── proposer/               # LLM-driven metric proposal
+│   ├── designer/               # LLM-driven widget group design
+│   ├── provisioner/            # Span-based metrics provisioning
+│   └── mcp_client/             # Client for Dashboard MCP Server
+│
+├── dashboard_mcp_server/       # MCP server for Datadog API operations
+│   ├── server.py               # FastMCP entry point (18 tools)
+│   └── tools/                  # Tool modules
+│       ├── dashboards.py       # Dashboard CRUD + widget groups
+│       ├── monitors.py         # Monitor creation (single + batch)
+│       ├── slos.py             # SLO creation (single + batch)
+│       ├── spans_metrics.py    # Span-based metrics CRUD
+│       └── llm_obs.py          # LLM Observability spans + evaluations
 │
 ├── scripts/
 │   ├── onboard_agent.py        # Automated agent onboarding
