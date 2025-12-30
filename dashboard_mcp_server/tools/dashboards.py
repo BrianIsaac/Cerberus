@@ -1,6 +1,8 @@
 """Dashboard management tools for MCP server."""
 
+import asyncio
 import json
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,119 @@ def _strip_read_only_fields(dashboard_dict: dict[str, Any]) -> dict[str, Any]:
     return dashboard_dict
 
 
+def _sync_get_dashboard(dashboard_id: str) -> dict[str, Any]:
+    """Synchronously fetch a dashboard from Datadog API.
+
+    Args:
+        dashboard_id: The dashboard ID to retrieve.
+
+    Returns:
+        Dashboard definition as dictionary.
+    """
+    config = get_datadog_config()
+    with ApiClient(config) as api_client:
+        api = DashboardsApi(api_client)
+        response = api.get_dashboard(dashboard_id=dashboard_id)
+        return response.to_dict()
+
+
+def _sync_update_dashboard(
+    dashboard_id: str,
+    dashboard_body: dict[str, Any],
+) -> dict[str, Any]:
+    """Synchronously update a dashboard via Datadog API.
+
+    Args:
+        dashboard_id: The dashboard ID to update.
+        dashboard_body: Dashboard definition (read-only fields stripped).
+
+    Returns:
+        Updated dashboard info.
+    """
+    config = get_datadog_config()
+    with ApiClient(config) as api_client:
+        api = DashboardsApi(api_client)
+        response = api.update_dashboard(
+            dashboard_id=dashboard_id,
+            body=dashboard_body,
+        )
+        return {
+            "id": response.id,
+            "title": response.title,
+        }
+
+
+def _sync_add_widget_group(
+    dashboard_id: str,
+    group_title: str,
+    widgets: list[dict[str, Any]],
+    service: str,
+) -> dict[str, Any]:
+    """Synchronously add a widget group to a dashboard.
+
+    Args:
+        dashboard_id: The dashboard ID to update.
+        group_title: Title for the new widget group.
+        widgets: List of widget definitions.
+        service: Service name for the widget group.
+
+    Returns:
+        Result with dashboard ID, group ID, and URL.
+    """
+    config = get_datadog_config()
+    with ApiClient(config) as api_client:
+        api = DashboardsApi(api_client)
+
+        # Get current dashboard
+        dashboard = api.get_dashboard(dashboard_id=dashboard_id)
+        dashboard_dict = dashboard.to_dict()
+        dashboard_dict = _strip_read_only_fields(dashboard_dict)
+
+        # Generate new group ID (find max existing + 10)
+        existing_ids = [w.get("id", 0) for w in dashboard_dict.get("widgets", [])]
+        new_group_id = max(existing_ids, default=0) + 10
+
+        # Create new group
+        new_group = {
+            "id": new_group_id,
+            "definition": {
+                "type": "group",
+                "title": group_title,
+                "layout_type": "ordered",
+                "widgets": widgets,
+            },
+        }
+
+        # Find insertion point (before "Operations & Actionable Items" if exists)
+        insert_index = len(dashboard_dict["widgets"])
+        for i, w in enumerate(dashboard_dict["widgets"]):
+            if w.get("definition", {}).get("title") == "Operations & Actionable Items":
+                insert_index = i
+                break
+
+        dashboard_dict["widgets"].insert(insert_index, new_group)
+
+        # Update template variables to include new service
+        for tv in dashboard_dict.get("template_variables", []):
+            if tv.get("name") == "service":
+                if service not in tv.get("available_values", []):
+                    tv["available_values"].append(service)
+                    tv["available_values"].sort()
+
+        # Update dashboard
+        response = api.update_dashboard(
+            dashboard_id=dashboard_id,
+            body=dashboard_dict,
+        )
+
+        return {
+            "id": response.id,
+            "group_id": new_group_id,
+            "group_title": group_title,
+            "widgets_added": len(widgets),
+        }
+
+
 def register_dashboard_tools(mcp: FastMCP) -> None:
     """Register dashboard management tools with the MCP server.
 
@@ -52,11 +167,7 @@ def register_dashboard_tools(mcp: FastMCP) -> None:
         Returns:
             Dashboard definition as JSON.
         """
-        config = get_datadog_config()
-        with ApiClient(config) as api_client:
-            api = DashboardsApi(api_client)
-            response = api.get_dashboard(dashboard_id=dashboard_id)
-            return response.to_dict()
+        return await asyncio.to_thread(_sync_get_dashboard, dashboard_id)
 
     @mcp.tool()
     async def update_dashboard(
@@ -72,22 +183,17 @@ def register_dashboard_tools(mcp: FastMCP) -> None:
         Returns:
             Updated dashboard with ID and URL.
         """
-        config = get_datadog_config()
         dashboard_body = json.loads(dashboard_json)
         dashboard_body = _strip_read_only_fields(dashboard_body)
 
-        with ApiClient(config) as api_client:
-            api = DashboardsApi(api_client)
-            response = api.update_dashboard(
-                dashboard_id=dashboard_id,
-                body=dashboard_body,
-            )
-            return {
-                "id": response.id,
-                "title": response.title,
-                "url": f"https://app.{DD_SITE}/dashboard/{response.id}",
-                "message": "Dashboard updated successfully",
-            }
+        result = await asyncio.to_thread(
+            _sync_update_dashboard, dashboard_id, dashboard_body
+        )
+        return {
+            **result,
+            "url": f"https://app.{DD_SITE}/dashboard/{result['id']}",
+            "message": "Dashboard updated successfully",
+        }
 
     @mcp.tool()
     async def add_widget_group_to_dashboard(
@@ -107,62 +213,21 @@ def register_dashboard_tools(mcp: FastMCP) -> None:
         Returns:
             Updated dashboard info including new group ID.
         """
-        config = get_datadog_config()
         widgets = json.loads(widgets_json)
 
-        with ApiClient(config) as api_client:
-            api = DashboardsApi(api_client)
+        result = await asyncio.to_thread(
+            _sync_add_widget_group,
+            dashboard_id,
+            group_title,
+            widgets,
+            service,
+        )
 
-            # Get current dashboard
-            dashboard = api.get_dashboard(dashboard_id=dashboard_id)
-            dashboard_dict = dashboard.to_dict()
-            dashboard_dict = _strip_read_only_fields(dashboard_dict)
-
-            # Generate new group ID (find max existing + 10)
-            existing_ids = [w.get("id", 0) for w in dashboard_dict.get("widgets", [])]
-            new_group_id = max(existing_ids, default=0) + 10
-
-            # Create new group
-            new_group = {
-                "id": new_group_id,
-                "definition": {
-                    "type": "group",
-                    "title": group_title,
-                    "layout_type": "ordered",
-                    "widgets": widgets,
-                },
-            }
-
-            # Find insertion point (before "Operations & Actionable Items" if exists)
-            insert_index = len(dashboard_dict["widgets"])
-            for i, w in enumerate(dashboard_dict["widgets"]):
-                if w.get("definition", {}).get("title") == "Operations & Actionable Items":
-                    insert_index = i
-                    break
-
-            dashboard_dict["widgets"].insert(insert_index, new_group)
-
-            # Update template variables to include new service
-            for tv in dashboard_dict.get("template_variables", []):
-                if tv.get("name") == "service":
-                    if service not in tv.get("available_values", []):
-                        tv["available_values"].append(service)
-                        tv["available_values"].sort()
-
-            # Update dashboard
-            response = api.update_dashboard(
-                dashboard_id=dashboard_id,
-                body=dashboard_dict,
-            )
-
-            return {
-                "id": response.id,
-                "group_id": new_group_id,
-                "group_title": group_title,
-                "widgets_added": len(widgets),
-                "url": f"https://app.{DD_SITE}/dashboard/{response.id}",
-                "message": f"Added widget group '{group_title}' with {len(widgets)} widgets",
-            }
+        return {
+            **result,
+            "url": f"https://app.{DD_SITE}/dashboard/{result['id']}",
+            "message": f"Added widget group '{group_title}' with {result['widgets_added']} widgets",
+        }
 
     @mcp.tool()
     async def read_local_dashboard(

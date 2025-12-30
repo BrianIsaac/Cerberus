@@ -18,7 +18,7 @@ spec:
         autoscaling.knative.dev/minScale: "0"
     spec:
       containerConcurrency: 40
-      timeoutSeconds: 120
+      timeoutSeconds: 300
       serviceAccountName: 118887195862-compute@developer.gserviceaccount.com
 
       containers:

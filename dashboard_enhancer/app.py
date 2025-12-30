@@ -98,7 +98,7 @@ def get_api_client() -> httpx.Client:
     """
     return httpx.Client(
         base_url=settings.dashboard_api_url,
-        timeout=180.0,
+        timeout=300.0,
         headers=get_api_headers(),
     )
 
