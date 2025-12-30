@@ -158,6 +158,8 @@ What sets this solution apart is the **scalable, self-referential observability 
 | **Monitors** | https://ap1.datadoghq.com/monitors/manage?q=team%3Aai-agents |
 | **SLOs** | https://ap1.datadoghq.com/slo?query=team%3Aai-agents |
 
+> **Note:** The Dashboard link is publicly shareable. LLM Obs Traces, Monitors, and SLOs links require authentication to the AI Singapore Datadog organisation.
+
 ## Observability Strategy
 
 ### Three-Layer Telemetry
