@@ -20,8 +20,21 @@ from ops_triage_agent.agent.state import (
     WorkflowStage,
 )
 from ops_triage_agent.config import settings
-from ops_triage_agent.governance import validate_input
+from ops_triage_agent.governance import (
+    create_approval_gate,
+    create_budget_tracker,
+    create_escalation_handler,
+    create_security_validator,
+    validate_input,
+    EscalationReason,
+)
+from shared.governance.approval import (
+    ApprovalStatus,
+    ProposedAction as GateProposedAction,
+)
 from ops_triage_agent.mcp_client.client import DatadogMCPClient
+from shared.governance.budget import BudgetTracker
+from shared.governance.escalation import EscalationHandler
 from ops_triage_agent.observability import (
     emit_budget_exceeded,
     emit_escalation,
@@ -39,6 +52,67 @@ from ops_triage_agent.prompts.synthesis_v1 import (
 )
 
 logger = structlog.get_logger()
+
+
+def _create_tracker_from_state(state: AgentState) -> BudgetTracker:
+    """Create a BudgetTracker synced with current state for metric emission.
+
+    This creates a fresh tracker per call (thread-safe) and syncs it with
+    the LangGraph state values. The tracker is used only for:
+    - Emitting governance metrics via DogStatsD
+    - Budget violation checking
+
+    The actual counter values remain in LangGraph state for persistence.
+
+    Args:
+        state: Current workflow state with budget counters.
+
+    Returns:
+        BudgetTracker instance synced to state values.
+    """
+    tracker = create_budget_tracker()
+    tracker.step_count = state.get("step_count", 0)
+    tracker.model_calls = state.get("model_calls", 0)
+    tracker.tool_calls = state.get("tool_calls", 0)
+    return tracker
+
+
+def _get_escalation_handler() -> EscalationHandler:
+    """Get escalation handler (stateless, safe to create per call).
+
+    Returns:
+        EscalationHandler instance for ops_triage_agent.
+    """
+    return create_escalation_handler()
+
+
+def _map_reason_to_enum(reason_str: str) -> EscalationReason:
+    """Map string escalation reason to EscalationReason enum.
+
+    Args:
+        reason_str: String reason from state.
+
+    Returns:
+        Matching EscalationReason or LOW_CONFIDENCE as default.
+    """
+    reason_lower = reason_str.lower()
+    if "budget" in reason_lower or "step" in reason_lower:
+        if "step" in reason_lower:
+            return EscalationReason.STEP_BUDGET_EXCEEDED
+        if "model" in reason_lower:
+            return EscalationReason.MODEL_BUDGET_EXCEEDED
+        if "tool" in reason_lower:
+            return EscalationReason.TOOL_BUDGET_EXCEEDED
+    if "confidence" in reason_lower:
+        return EscalationReason.LOW_CONFIDENCE
+    if "security" in reason_lower or "injection" in reason_lower:
+        return EscalationReason.SECURITY_VIOLATION
+    if "clarification" in reason_lower:
+        return EscalationReason.CLARIFICATION_EXHAUSTED
+    if "quality" in reason_lower:
+        return EscalationReason.QUALITY_THRESHOLD_FAILED
+    return EscalationReason.LOW_CONFIDENCE
+
 
 # Try to import RAGAS for quality evaluation
 try:
@@ -191,6 +265,11 @@ def intake_node(state: AgentState) -> dict[str, Any]:
 
             escalation_reason = " ".join(reason_parts)
 
+        # Emit governance metrics via BudgetTracker
+        tracker = _create_tracker_from_state(state)
+        tracker.increment_step()
+        tracker.increment_model_call()
+
         return {
             "stage": WorkflowStage.INTAKE,
             "intent": intent,
@@ -215,26 +294,23 @@ def intake_router(state: AgentState) -> str:
     Returns:
         Next node name: "escalate" or "collect"
     """
-    # Check budgets first
-    if state["step_count"] >= settings.agent_max_steps:
-        emit_budget_exceeded("steps", settings.agent_max_steps, state["step_count"])
-        return "escalate"
+    # Check budgets using BudgetTracker (created fresh, synced from state)
+    tracker = _create_tracker_from_state(state)
 
-    if state["model_calls"] >= settings.agent_max_model_calls:
-        emit_budget_exceeded(
-            "model_calls", settings.agent_max_model_calls, state["model_calls"]
-        )
-        return "escalate"
-
-    if state["tool_calls"] >= settings.agent_max_tool_calls:
-        emit_budget_exceeded(
-            "tool_calls", settings.agent_max_tool_calls, state["tool_calls"]
-        )
+    budget_reason = tracker.check_budget()
+    if budget_reason:
+        handler = _get_escalation_handler()
+        handler.escalate_from_budget(tracker)
         return "escalate"
 
     # Check if escalation_reason was set by intake_node (needs clarification)
     if state.get("escalation_reason"):
-        emit_escalation("clarification_needed")
+        handler = _get_escalation_handler()
+        handler.escalate(
+            reason=EscalationReason.CLARIFICATION_EXHAUSTED,
+            message=state.get("escalation_reason"),
+            context={"stage": "intake"},
+        )
         return "escalate"
 
     return "collect"
@@ -280,8 +356,21 @@ def escalate_node(state: AgentState) -> dict[str, Any]:
             "Unable to classify request with sufficient confidence after multiple attempts"
         )
 
-        logger.info("escalating_to_human", reason=reason)
-        emit_escalation(reason)
+        # Use EscalationHandler for consistent metrics
+        handler = _get_escalation_handler()
+        reason_enum = _map_reason_to_enum(reason)
+        result = handler.escalate(
+            reason=reason_enum,
+            message=reason,
+            context={
+                "stage": state.get("stage"),
+                "step_count": state.get("step_count"),
+            },
+        )
+
+        # Emit step metric for escalation stage
+        tracker = _create_tracker_from_state(state)
+        tracker.increment_step()
 
         return {
             "stage": WorkflowStage.ESCALATED,
@@ -333,6 +422,10 @@ async def collect_node(state: AgentState) -> dict[str, Any]:
                     metrics_data = await mcp.get_metrics(
                         service=service, time_window=time_window
                     )
+                    # Emit metric then increment local counter
+                    tracker = _create_tracker_from_state(state)
+                    tracker.tool_calls = tool_calls
+                    tracker.increment_tool_call()
                     tool_calls += 1
                 except Exception as e:
                     logger.error("metrics_collection_failed", error=str(e))
@@ -346,6 +439,10 @@ async def collect_node(state: AgentState) -> dict[str, Any]:
                         query="status:error OR status:warn",
                         time_window=time_window,
                     )
+                    # Emit metric then increment local counter
+                    tracker = _create_tracker_from_state(state)
+                    tracker.tool_calls = tool_calls
+                    tracker.increment_tool_call()
                     tool_calls += 1
                 except Exception as e:
                     logger.error("logs_collection_failed", error=str(e))
@@ -359,6 +456,10 @@ async def collect_node(state: AgentState) -> dict[str, Any]:
                         query="status:error",
                         time_window=time_window,
                     )
+                    # Emit metric then increment local counter
+                    tracker = _create_tracker_from_state(state)
+                    tracker.tool_calls = tool_calls
+                    tracker.increment_tool_call()
                     tool_calls += 1
                 except Exception as e:
                     logger.error("traces_collection_failed", error=str(e))
@@ -378,6 +479,10 @@ async def collect_node(state: AgentState) -> dict[str, Any]:
             has_traces=traces_data is not None,
             errors=len(collection_errors),
         )
+
+        # Emit step metric for collect stage
+        tracker = _create_tracker_from_state(state)
+        tracker.increment_step()
 
         return {
             "stage": WorkflowStage.COLLECT,
@@ -403,15 +508,27 @@ def collect_router(state: AgentState) -> str:
 
     # Check if we have any evidence
     if not evidence:
+        handler = _get_escalation_handler()
+        handler.escalate(
+            reason=EscalationReason.ALL_SOURCES_FAILED,
+            context={"stage": "collect"},
+        )
         return "escalate"
 
     # Check if all sources failed
     if not evidence.metrics and not evidence.logs and not evidence.traces:
+        handler = _get_escalation_handler()
+        handler.escalate(
+            reason=EscalationReason.ALL_SOURCES_FAILED,
+            context={"stage": "collect"},
+        )
         return "escalate"
 
-    # Check budget
-    if state["step_count"] >= settings.agent_max_steps - 2:
-        emit_budget_exceeded("steps", settings.agent_max_steps, state["step_count"])
+    # Check budget with buffer of 2 to leave room for final steps
+    tracker = _create_tracker_from_state(state)
+    if tracker.check_budget(buffer=2):
+        handler = _get_escalation_handler()
+        handler.escalate_from_budget(tracker)
         return "escalate"
 
     return "synthesis"
@@ -491,6 +608,13 @@ Traces: {traces_str[:1000]}"""
                 "requires_incident": False,
             }
 
+        # Validate output for PII leakage
+        validator = create_security_validator()
+        output_result = validator.validate_output(result.get("summary", ""))
+        if not output_result.is_valid:
+            logger.warning("output_validation_failed", error=output_result.message)
+            result["summary"] = validator.redact_pii(result["summary"])
+
         # Build hypothesis objects
         hypotheses = []
         for h in result.get("hypotheses", []):
@@ -558,6 +682,11 @@ Traces: {traces_str[:1000]}"""
             requires_approval=requires_approval,
         )
 
+        # Emit governance metrics via BudgetTracker
+        tracker = _create_tracker_from_state(state)
+        tracker.increment_step()
+        tracker.increment_model_call()
+
         return {
             "stage": WorkflowStage.SYNTHESIS,
             "summary": result.get("summary", ""),
@@ -583,32 +712,34 @@ def synthesis_router(state: AgentState) -> str:
         Next node name: "approval", "escalate", or "complete"
     """
     confidence = state["synthesis_confidence"]
+    tracker = _create_tracker_from_state(state)
 
     # Check if escalation was triggered during synthesis
     if state.get("escalation_reason"):
-        emit_escalation(state["escalation_reason"])
-        return "escalate"
-
-    # Check budgets
-    if state["step_count"] >= settings.agent_max_steps:
-        emit_budget_exceeded("steps", settings.agent_max_steps, state["step_count"])
-        return "escalate"
-
-    if state["model_calls"] >= settings.agent_max_model_calls:
-        emit_budget_exceeded(
-            "model_calls", settings.agent_max_model_calls, state["model_calls"]
+        handler = _get_escalation_handler()
+        reason_enum = _map_reason_to_enum(state.get("escalation_reason", ""))
+        handler.escalate(
+            reason=reason_enum,
+            message=state.get("escalation_reason"),
+            context={"stage": "synthesis"},
         )
         return "escalate"
 
-    if state["tool_calls"] >= settings.agent_max_tool_calls:
-        emit_budget_exceeded(
-            "tool_calls", settings.agent_max_tool_calls, state["tool_calls"]
-        )
+    # Check budgets using BudgetTracker
+    budget_reason = tracker.check_budget()
+    if budget_reason:
+        handler = _get_escalation_handler()
+        handler.escalate_from_budget(tracker)
         return "escalate"
 
-    # Check confidence threshold
+    # Check confidence threshold using EscalationHandler
     if confidence < settings.confidence_threshold:
-        emit_escalation("low_synthesis_confidence")
+        handler = _get_escalation_handler()
+        handler.escalate_from_confidence(
+            confidence=confidence,
+            threshold=settings.confidence_threshold,
+            context={"stage": "synthesis"},
+        )
         return "escalate"
 
     # Check if approval is needed
@@ -619,7 +750,7 @@ def synthesis_router(state: AgentState) -> str:
 
 
 def approval_node(state: AgentState) -> dict[str, Any]:
-    """Request approval for write actions via interrupt.
+    """Request approval for write actions via ApprovalGate.
 
     Args:
         state: Current workflow state
@@ -660,36 +791,33 @@ def approval_node(state: AgentState) -> dict[str, Any]:
             next_steps=state["next_steps"],
         )
 
-        # Format approval request
-        approval_message = f"""
-Proposed Action: Create {proposed.action_type.upper()}
+        # Convert agent ProposedAction to ApprovalGate ProposedAction for consistent metrics
+        gate_action = GateProposedAction(
+            action_type=proposed.action_type,
+            title=proposed.title,
+            description=proposed.description,
+            severity=proposed.severity,
+            evidence=proposed.evidence_links + [f"Hypothesis: {h}" for h in proposed.hypotheses],
+            context={
+                "next_steps": proposed.next_steps,
+                "trace_id": state.get("trace_id"),
+            },
+        )
 
-Title: {proposed.title}
-Description: {proposed.description}
+        # Use ApprovalGate for consistent metrics (emits approval_requested, approval_decision, latency)
+        gate = create_approval_gate()
+        decision = gate.request_approval(gate_action, interrupt)
 
-Hypotheses:
-{chr(10).join(f'  {i+1}. {h}' for i, h in enumerate(proposed.hypotheses))}
-
-Next Steps:
-{chr(10).join(f'  - {s}' for s in proposed.next_steps)}
-
-Enter 'approve' to create, 'reject' to cancel, or 'edit' to modify:
-"""
-
-        # Interrupt for human decision
-        decision = interrupt(approval_message)
-
-        # Emit metric for human verification signal capture
-        outcome = decision.strip().lower() if decision else "rejected"
-        emit_review_outcome(outcome)
+        # Emit review outcome for backwards compatibility
+        emit_review_outcome(decision.status.value)
 
         return {
             "stage": WorkflowStage.APPROVAL,
             "proposed_action": proposed,
-            "approval_decision": decision,
-            "approval_status": outcome,
+            "approval_decision": decision.decision_text,
+            "approval_status": decision.status.value,
             "step_count": state["step_count"] + 1,
-            "messages": [f"Approval decision: {decision}"],
+            "messages": [f"Approval decision: {decision.status.value}"],
         }
 
 

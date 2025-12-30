@@ -1,6 +1,7 @@
 """Governance factories for Dashboard Enhancement Agent."""
 
 from shared.governance import (
+    ApprovalGate,
     BudgetTracker,
     EscalationHandler,
     SecurityValidator,
@@ -48,6 +49,18 @@ def create_escalation_handler() -> EscalationHandler:
         Configured EscalationHandler instance.
     """
     return EscalationHandler(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+    )
+
+
+def create_approval_gate() -> ApprovalGate:
+    """Create an approval gate for dashboard enhancement actions.
+
+    Returns:
+        Configured ApprovalGate instance.
+    """
+    return ApprovalGate(
         service=AGENT_SERVICE,
         agent_type=AGENT_TYPE,
     )

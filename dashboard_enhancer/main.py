@@ -10,8 +10,11 @@ from ddtrace.llmobs import LLMObs
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from datadog import statsd
+
 from .config import settings
 from .governance import create_budget_tracker, create_security_validator
+from shared.governance.constants import GovernanceMetrics, GovernanceTags
 from .models import (
     ApprovalRequest,
     ApprovalResponse,
@@ -255,6 +258,15 @@ async def approve(request: ApprovalRequest):
     structlog.contextvars.bind_contextvars(trace_id=request.trace_id)
 
     logger.info("approval_received", outcome=request.outcome)
+
+    # Emit approval decision metric for governance dashboard
+    tags = [
+        f"service:{settings.dd_service}",
+        f"agent_type:analysis",
+        f"{GovernanceTags.ACTION_TYPE}:widget_application",
+        f"{GovernanceTags.DECISION}:{request.outcome}",
+    ]
+    statsd.increment(GovernanceMetrics.APPROVAL_DECISION, tags=tags)
 
     # Get pending approval
     pending = pending_approvals.get(request.trace_id)

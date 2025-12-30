@@ -78,8 +78,10 @@ class GovernanceMetrics:
 
     BUDGET_CHECK = f"{PREFIX}.budget_check"
     BUDGET_REMAINING = f"{PREFIX}.budget_remaining"
+    BUDGET_UTILISATION = f"{PREFIX}.budget_utilisation"
     ESCALATION = f"{PREFIX}.escalation"
     APPROVAL_REQUESTED = f"{PREFIX}.approval_requested"
+    APPROVAL_PENDING = f"{PREFIX}.approval_pending"
     APPROVAL_DECISION = f"{PREFIX}.approval_decision"
     APPROVAL_LATENCY = f"{PREFIX}.approval_latency"
     SECURITY_CHECK = f"{PREFIX}.security_check"

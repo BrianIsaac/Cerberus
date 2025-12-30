@@ -264,7 +264,7 @@
               "title": "Pending Approvals",
               "requests": [
                 {
-                  "q": "sum:ai_agent.governance.approval_pending{$service,$env}.as_count()",
+                  "q": "sum:ai_agent.governance.approval_requested{$service,$env}.as_count()",
                   "aggregator": "last",
                   "conditional_formats": [
                     {
@@ -294,21 +294,21 @@
               "title": "Approval Decisions",
               "requests": [
                 {
-                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,status:approved}.as_count()",
+                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,decision:approved}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "green"
                   }
                 },
                 {
-                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,status:rejected}.as_count()",
+                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,decision:rejected}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "red"
                   }
                 },
                 {
-                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,status:auto_approved}.as_count()",
+                  "q": "sum:ai_agent.governance.approval_decision{$service,$env,decision:skipped}.as_count()",
                   "display_type": "bars",
                   "style": {
                     "palette": "blue"
@@ -339,15 +339,15 @@
               "title": "Quality Scores (LLM-as-Judge)",
               "requests": [
                 {
-                  "q": "avg:ai_agent.quality_score{$service,$env,score_type:code_quality}",
+                  "q": "avg:ai_agent.quality.score{$service,$env,metric_name:code_quality}",
                   "display_type": "line"
                 },
                 {
-                  "q": "avg:ai_agent.quality_score{$service,$env,score_type:correctness_score}",
+                  "q": "avg:ai_agent.quality.score{$service,$env,metric_name:correctness_score}",
                   "display_type": "line"
                 },
                 {
-                  "q": "avg:ai_agent.quality_score{$service,$env,score_type:safety_score}",
+                  "q": "avg:ai_agent.quality.score{$service,$env,metric_name:safety_score}",
                   "display_type": "line"
                 }
               ],

@@ -69,30 +69,52 @@ class BudgetTracker:
         statsd.gauge(metric, value, tags=tags)
 
     def increment_step(self) -> None:
-        """Increment step counter and emit remaining budget metric."""
+        """Increment step counter and emit budget metrics."""
         self.step_count += 1
         self._emit_metric(
             GovernanceMetrics.BUDGET_REMAINING,
             self.max_steps - self.step_count,
-            [f"{GovernanceTags.BUDGET_TYPE}:steps"],
+            [f"{GovernanceTags.BUDGET_TYPE}:step"],
+        )
+        utilisation = self.step_count / self.max_steps if self.max_steps > 0 else 0
+        self._emit_metric(
+            GovernanceMetrics.BUDGET_UTILISATION,
+            utilisation,
+            [f"{GovernanceTags.BUDGET_TYPE}:step"],
         )
 
     def increment_model_call(self) -> None:
-        """Increment model call counter and emit remaining budget metric."""
+        """Increment model call counter and emit budget metrics."""
         self.model_calls += 1
         self._emit_metric(
             GovernanceMetrics.BUDGET_REMAINING,
             self.max_model_calls - self.model_calls,
-            [f"{GovernanceTags.BUDGET_TYPE}:model_calls"],
+            [f"{GovernanceTags.BUDGET_TYPE}:model"],
+        )
+        utilisation = (
+            self.model_calls / self.max_model_calls if self.max_model_calls > 0 else 0
+        )
+        self._emit_metric(
+            GovernanceMetrics.BUDGET_UTILISATION,
+            utilisation,
+            [f"{GovernanceTags.BUDGET_TYPE}:model"],
         )
 
     def increment_tool_call(self) -> None:
-        """Increment tool call counter and emit remaining budget metric."""
+        """Increment tool call counter and emit budget metrics."""
         self.tool_calls += 1
         self._emit_metric(
             GovernanceMetrics.BUDGET_REMAINING,
             self.max_tool_calls - self.tool_calls,
-            [f"{GovernanceTags.BUDGET_TYPE}:tool_calls"],
+            [f"{GovernanceTags.BUDGET_TYPE}:tool"],
+        )
+        utilisation = (
+            self.tool_calls / self.max_tool_calls if self.max_tool_calls > 0 else 0
+        )
+        self._emit_metric(
+            GovernanceMetrics.BUDGET_UTILISATION,
+            utilisation,
+            [f"{GovernanceTags.BUDGET_TYPE}:tool"],
         )
 
     def check_budget(self, buffer: int = 0) -> EscalationReason | None:

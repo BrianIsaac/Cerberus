@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 import structlog
+from datadog import statsd
 from ddtrace.llmobs import LLMObs
 from ddtrace.llmobs.decorators import llm, tool, workflow
 from google import genai
@@ -12,10 +13,13 @@ from google.genai import types
 
 from sas_generator.config import settings
 from sas_generator.governance import (
+    AGENT_SERVICE,
+    AGENT_TYPE,
     create_budget_tracker,
     create_escalation_handler,
     create_security_validator,
 )
+from shared.governance.constants import GovernanceMetrics
 from sas_generator.mcp_client import SASMCPClient
 from sas_generator.prompts import SASCodeResponse
 from sas_generator.quality import evaluate_code_quality, quick_syntax_check
@@ -273,6 +277,15 @@ async def generate_sas_code_agentic(query: str) -> dict[str, Any]:
 
     # Determine if approval would be required (for API response)
     requires_approval = quality_score < 0.7
+
+    # Emit approval pending metric for dashboard visibility when approval would be required
+    if requires_approval:
+        tags = [
+            f"service:{AGENT_SERVICE}",
+            f"agent_type:{AGENT_TYPE}",
+            "action_type:code_generation",
+        ]
+        statsd.increment(GovernanceMetrics.APPROVAL_REQUESTED, tags=tags)
 
     # Output annotation
     LLMObs.annotate(
