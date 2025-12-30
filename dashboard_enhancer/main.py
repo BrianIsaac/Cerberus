@@ -25,7 +25,13 @@ from .observability import (
     setup_custom_metrics,
     setup_llm_observability,
 )
-from .workflow import apply_enhancement, enhance_dashboard
+from .workflow import (
+    analyze_and_preview,
+    apply_enhancement,
+    enhance_dashboard,
+    provision_and_apply,
+    rollback_provisioning,
+)
 
 logger = structlog.get_logger()
 
@@ -152,7 +158,7 @@ async def enhance(request: EnhanceRequest):
         if not validation.is_valid:
             raise HTTPException(
                 status_code=400,
-                detail={"error": validation.reason, "details": validation.details},
+                detail={"error": validation.reason, "details": validation.detected_items},
             )
 
         # Check agent directory exists
@@ -171,7 +177,7 @@ async def enhance(request: EnhanceRequest):
     try:
         # Run enhancement workflow
         tracker = create_budget_tracker()
-        result = await enhance_dashboard(
+        result = await enhance_dashboard(  # type: ignore[reportCallIssue, reportGeneralTypeIssues]
             service=request.service,
             agent_source=agent_source,
             agent_profile_input=request.agent_profile,
@@ -310,27 +316,40 @@ async def list_pending():
 async def cleanup_metrics(service: str):
     """Delete all provisioned metrics for a service.
 
+    Lists all span-based metrics matching the service prefix and deletes them.
+
     Args:
         service: Service name to cleanup metrics for.
 
     Returns:
         Cleanup results.
     """
-    from .analyzer import AgentProfile
+    from .mcp_client import DashboardMCPClient
     from .provisioner import MetricsProvisioner
 
     logger.info("cleanup_metrics_started", service=service)
 
-    # Create minimal profile for cleanup
-    profile = AgentProfile(
-        service_name=service,
-        agent_type="unknown",
-        domain="unknown",
-        description="",
-    )
+    # Find all metrics matching this service's naming pattern
+    normalised_service = service.replace("-", "_")
+    metric_ids_to_delete: list[str] = []
 
-    provisioner = MetricsProvisioner(profile)
-    result = await provisioner.cleanup_metrics()
+    async with DashboardMCPClient() as mcp:
+        existing = await mcp.list_spans_metrics()
+        for metric in existing.get("metrics", []):
+            metric_id = metric.get("id", "")
+            if metric_id.startswith(normalised_service):
+                metric_ids_to_delete.append(metric_id)
+
+    if not metric_ids_to_delete:
+        return {
+            "service": service,
+            "deleted": [],
+            "failed": [],
+            "message": f"No metrics found for service {service}",
+        }
+
+    provisioner = MetricsProvisioner(service)
+    result = await provisioner.cleanup_metrics(metric_ids_to_delete)
 
     logger.info(
         "cleanup_metrics_completed",
@@ -344,3 +363,234 @@ async def cleanup_metrics(service: str):
         "failed": result.get("failed", []),
         "message": f"Deleted {len(result.get('deleted', []))} metrics",
     }
+
+
+# =============================================================================
+# Two-Phase Personalised Observability Endpoints
+# =============================================================================
+
+
+@app.post("/analyze")
+async def analyze(request: EnhanceRequest):
+    """Analyse service and preview personalised observability.
+
+    Returns preview without creating any resources. Call /provision/{trace_id}
+    to create metrics and apply widgets.
+
+    Args:
+        request: Enhancement request with service and agent profile.
+
+    Returns:
+        Preview of proposed metrics and widgets.
+    """
+    trace_id = str(uuid.uuid4())[:8]
+
+    structlog.contextvars.bind_contextvars(
+        trace_id=trace_id,
+        service=request.service,
+    )
+
+    logger.info(
+        "analyze_started",
+        agent_dir=request.agent_dir,
+        github_url=request.github_url,
+        has_profile=request.agent_profile is not None,
+    )
+
+    # Determine agent source
+    agent_source = None
+    if request.github_url:
+        agent_source = request.github_url
+    elif request.agent_dir:
+        security_validator = create_security_validator()
+        validation = security_validator.validate_input(request.agent_dir)
+        if validation.is_valid:
+            validated_path = Path(request.agent_dir)
+            if validated_path.is_file():
+                validated_path = validated_path.parent
+            if validated_path.exists():
+                agent_source = validated_path
+
+    try:
+        profile = request.agent_profile
+        if not profile:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "agent_profile is required for /analyze endpoint",
+                    "trace_id": trace_id,
+                },
+            )
+
+        result = await analyze_and_preview(  # type: ignore[reportCallIssue, reportGeneralTypeIssues]
+            service=request.service,
+            domain=profile.domain,
+            agent_type=profile.agent_type,
+            agent_source=agent_source,
+            llm_provider=profile.llm_provider,
+            framework=profile.framework,
+        )
+
+        # Store for provisioning phase
+        pending_approvals[trace_id] = {
+            "type": "preview",
+            "result": result,
+            "dashboard_id": request.dashboard_id or settings.dashboard_id,
+        }
+
+        logger.info(
+            "analyze_completed",
+            proposed_metrics=len(result.get("proposed_metrics", [])),
+            widgets=len(result.get("widget_preview", {}).get("widgets", [])),
+        )
+
+        return {
+            "trace_id": trace_id,
+            "service": request.service,
+            "discovery": result.get("discovery", {}),
+            "llmobs_status": result.get("llmobs_status", {}),
+            "proposed_metrics": result.get("proposed_metrics", []),
+            "widget_preview": result.get("widget_preview", {}),
+            "message": "Analysis complete. Review and call /provision/{trace_id} to apply.",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("analyze_failed", error=str(e), trace_id=trace_id)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": str(e), "trace_id": trace_id},
+        )
+
+
+@app.post("/provision/{trace_id}")
+async def provision(trace_id: str):
+    """Provision metrics and apply widgets for an analysed service.
+
+    Creates metrics in Datadog and adds widget group to dashboard.
+    Call /rollback/{trace_id} to undo if needed.
+
+    Args:
+        trace_id: Trace ID from /analyze response.
+
+    Returns:
+        Provisioning result with dashboard URL.
+    """
+    structlog.contextvars.bind_contextvars(trace_id=trace_id)
+
+    logger.info("provision_started")
+
+    if trace_id not in pending_approvals:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Analysis not found", "trace_id": trace_id},
+        )
+
+    pending = pending_approvals[trace_id]
+    if pending.get("type") != "preview":
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid trace_id - not a preview", "trace_id": trace_id},
+        )
+
+    try:
+        tracker = create_budget_tracker()
+        result = await provision_and_apply(  # type: ignore[reportCallIssue, reportGeneralTypeIssues]
+            preview_result=pending["result"],
+            dashboard_id=pending["dashboard_id"],
+            budget_tracker=tracker,
+        )
+
+        # Update for potential rollback
+        pending_approvals[trace_id] = {
+            "type": "provisioned",
+            "result": result,
+            "service": pending["result"]["service"],
+        }
+
+        logger.info(
+            "provision_completed",
+            metrics_created=result["metrics_created"],
+            widgets_added=len(result["widget_group"].get("widgets", [])),
+        )
+
+        return {
+            "trace_id": trace_id,
+            "success": True,
+            "service": result["service"],
+            "metrics_created": result["metrics_created"],
+            "metrics_existing": result["metrics_existing"],
+            "metrics_failed": result["metrics_failed"],
+            "widgets_added": len(result["widget_group"].get("widgets", [])),
+            "dashboard_url": result.get("dashboard_url"),
+            "message": "Provisioning complete. Personalised widget group added to dashboard.",
+        }
+
+    except Exception as e:
+        logger.error("provision_failed", error=str(e), trace_id=trace_id)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": str(e), "trace_id": trace_id},
+        )
+
+
+@app.delete("/rollback/{trace_id}")
+async def rollback(trace_id: str):
+    """Rollback provisioned metrics.
+
+    Deletes metrics created during provisioning. Note: widget group
+    removal from dashboard is not yet supported.
+
+    Args:
+        trace_id: Trace ID from /provision response.
+
+    Returns:
+        Rollback result with deleted metric IDs.
+    """
+    structlog.contextvars.bind_contextvars(trace_id=trace_id)
+
+    logger.info("rollback_started")
+
+    if trace_id not in pending_approvals:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "Provisioning not found", "trace_id": trace_id},
+        )
+
+    pending = pending_approvals[trace_id]
+    if pending.get("type") != "provisioned":
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Nothing to rollback - not provisioned", "trace_id": trace_id},
+        )
+
+    try:
+        result = pending["result"]
+        rollback_result = await rollback_provisioning(
+            service=pending["service"],
+            created_metric_ids=result.get("created_metric_ids", []),
+        )
+
+        del pending_approvals[trace_id]
+
+        logger.info(
+            "rollback_completed",
+            deleted=len(rollback_result.get("deleted", [])),
+            failed=len(rollback_result.get("failed", [])),
+        )
+
+        return {
+            "trace_id": trace_id,
+            "success": True,
+            "deleted": rollback_result.get("deleted", []),
+            "failed": rollback_result.get("failed", []),
+            "message": f"Rolled back {len(rollback_result.get('deleted', []))} metrics.",
+        }
+
+    except Exception as e:
+        logger.error("rollback_failed", error=str(e), trace_id=trace_id)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": str(e), "trace_id": trace_id},
+        )
