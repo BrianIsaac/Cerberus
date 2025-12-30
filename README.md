@@ -1,10 +1,65 @@
-# Ops Assistant: Scalable Multi-Agent Observability Platform
+# Ops Assistant: Scalable Dynamic Multi-Agent Observability Platform
 
 **AI Partner Catalyst: Accelerate Innovation** — Datadog LLM Observability Challenge
 
-A production-grade observability framework for AI agents using Datadog. Any new agent can be onboarded with standardised telemetry, automatic dashboard inclusion, and template-based monitors/SLOs—while being fully observable through the same Datadog platform it queries.
+A production-grade observability framework for AI agents using Datadog. Any new agent can be onboarded with built-in governance, standardised telemetry, and **dynamically generated personalised dashboards**—while being fully observable through the same Datadog platform it queries.
 
-## The Innovation: Fleet-Wide AI Agent Observability
+## The Innovation: Two-Part Scalable AI Agent Observability
+
+This solution implements the governance principles from ["Practices for Governing Agentic AI Systems"](https://arxiv.org/pdf/2512.04123) (OpenAI et al., 2024) combined with a novel **Dynamic Personalised Observability Agent**:
+
+### 1. Governance-First Agent Onboarding
+
+Based on the paper's recommendations for governing AI agents in production, every agent onboarded to this platform receives:
+
+| Governance Principle | Implementation |
+|---------------------|----------------|
+| **Bounded Autonomy** | Step budgets (max 8 steps), tool call limits (max 6), model call limits (max 5) |
+| **Human-in-the-Loop** | Approval gates for high-impact actions, escalation handlers for low-confidence decisions |
+| **Graduated Trust** | Confidence thresholds (0.7) that trigger human review when not met |
+| **Security Validation** | Prompt injection detection, PII scanning, input sanitisation |
+| **Observable Constraints** | All governance limits emit metrics (`ai_agent.governance.*`) for SLO tracking |
+
+The `shared/governance/` module provides factory functions that configure these constraints per-agent:
+
+```python
+from shared.governance import create_budget_tracker, create_security_validator
+
+budget = create_budget_tracker("my-agent", max_steps=8, max_tool_calls=6)
+security = create_security_validator("my-agent")
+```
+
+### 2. Dynamic Personalised Observability Agent
+
+Beyond shared governance, the **Dashboard Enhancement Agent** automatically creates domain-specific observability for each agent:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     DASHBOARD ENHANCEMENT AGENT                              │
+│                                                                              │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
+│   │  Discovery  │───>│  Proposer   │───>│ Provisioner │───>│  Designer   │  │
+│   │             │    │   (LLM)     │    │             │    │   (LLM)     │  │
+│   │ • Code      │    │             │    │             │    │             │  │
+│   │ • Telemetry │    │ Domain-     │    │ Span-based  │    │ Personalised│  │
+│   │ • LLMObs    │    │ specific    │    │ metrics in  │    │ widget      │  │
+│   │             │    │ metrics     │    │ Datadog     │    │ group       │  │
+│   └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘  │
+│                                                                              │
+│   Input: service name, code path/GitHub URL, agent profile                   │
+│   Output: Provisioned metrics + widget group added to fleet dashboard        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this matters:** Traditional observability requires manual dashboard creation per service. The Dashboard Enhancement Agent:
+- **Analyses** agent code to discover workflow operations, LLM calls, and tool invocations
+- **Proposes** domain-specific metrics (e.g., `sas_generator.code.quality.score`) not generic infrastructure metrics
+- **Provisions** span-based metrics automatically in Datadog
+- **Designs** a personalised widget group using LLM and adds it to the shared fleet dashboard
+
+This enables **zero-touch observability onboarding**—new agents get meaningful, domain-relevant dashboards without manual configuration.
+
+### Combined Architecture
 
 What sets this solution apart is the **scalable, self-referential observability architecture**:
 
@@ -45,22 +100,26 @@ What sets this solution apart is the **scalable, self-referential observability 
 │  ┌───────────────┐         ┌───────────────┐         ┌───────────────┐           │
 │  │ OPS ASSISTANT │         │ SAS GENERATOR │         │ FUTURE AGENTS │           │
 │  │   (triage)    │         │(code-generation)│        │  (onboard via │           │
-│  │               │         │               │         │    script)    │           │
+│  │               │         │               │         │   Enhancer)   │           │
 │  │ service:      │         │ service:      │         │ service:      │           │
 │  │ ops-assistant │         │ sas-generator │         │ my-new-agent  │           │
 │  └───────┬───────┘         └───────┬───────┘         └───────┬───────┘           │
-│          │                         │                         │                    │
-│          └─────────────────────────┼─────────────────────────┘                    │
-│                                    │                                              │
-│                                    ▼                                              │
-│                         ┌─────────────────────┐                                   │
-│                         │   MCP TOOL SERVERS  │                                   │
-│                         │  (Datadog APIs, SAS)│                                   │
-│                         └─────────────────────┘                                   │
+│          │                         │                         ▲                    │
+│          └─────────────────────────┼─────────────────────────┼────────────────┐   │
+│                                    │                         │                │   │
+│                                    ▼                         │                │   │
+│                         ┌─────────────────────┐    ┌────────┴────────┐        │   │
+│                         │   MCP TOOL SERVERS  │    │    DASHBOARD    │        │   │
+│                         │  (Datadog APIs, SAS)│◄───│    ENHANCER     │────────┘   │
+│                         └─────────────────────┘    │ (auto-onboard)  │            │
+│                                                    └─────────────────┘            │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key innovation:** All agents share the `team:ai-agents` tag, enabling fleet-wide monitoring while `service:<name>` allows per-agent drill-down. The shared modules ensure consistent telemetry (observability) and bounded autonomy (governance) across all agents.
+**Key innovations:**
+1. **Governance-as-Code**: All agents inherit bounded autonomy from `shared/governance/` based on [OpenAI's governance paper](https://arxiv.org/pdf/2512.04123)
+2. **Dynamic Observability**: The Dashboard Enhancement Agent analyses new agents and creates personalised metrics/widgets automatically
+3. **Fleet-Wide + Per-Agent**: `team:ai-agents` tag enables fleet monitoring, `service:<name>` enables drill-down, personalised widget groups provide domain-specific insights
 
 ## Hard Requirements Checklist
 
