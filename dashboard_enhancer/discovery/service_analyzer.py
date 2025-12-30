@@ -14,6 +14,21 @@ logger = structlog.get_logger()
 
 
 @dataclass
+class CategorisedOperation:
+    """An operation categorised by its type.
+
+    Attributes:
+        name: The operation/function name.
+        operation_type: Type of operation (workflow, llm, tool, task, or general).
+        description: Optional description from docstring.
+    """
+
+    name: str
+    operation_type: str
+    description: str = ""
+
+
+@dataclass
 class ServiceDiscovery:
     """Discovery results for a service.
 
@@ -24,6 +39,10 @@ class ServiceDiscovery:
         llm_provider: LLM provider used.
         framework: Agent framework.
         discovered_operations: Operations found in code/spans.
+        categorised_operations: Operations categorised by type (workflow, llm, tool, etc.).
+        workflow_operations: Main workflow entry points (highest priority for metrics).
+        llm_operations: LLM call operations.
+        tool_operations: Tool/MCP operations.
         discovered_metrics: Existing custom metrics.
         llmobs_span_types: Types of LLMObs spans found.
         sample_inputs: Sample input patterns (sanitised).
@@ -36,6 +55,10 @@ class ServiceDiscovery:
     llm_provider: str = "unknown"
     framework: str = "unknown"
     discovered_operations: list[str] = field(default_factory=list)
+    categorised_operations: list[CategorisedOperation] = field(default_factory=list)
+    workflow_operations: list[str] = field(default_factory=list)
+    llm_operations: list[str] = field(default_factory=list)
+    tool_operations: list[str] = field(default_factory=list)
     discovered_metrics: list[str] = field(default_factory=list)
     llmobs_span_types: list[str] = field(default_factory=list)
     sample_inputs: list[str] = field(default_factory=list)
@@ -130,6 +153,28 @@ class ServiceDiscoveryAnalyzer:
 
             discovery.discovered_operations.extend(profile.span_operations)
 
+            # Categorise operations by type
+            for op in profile.span_operations:
+                if ":" in op:
+                    op_type, op_name = op.split(":", 1)
+                    categorised = CategorisedOperation(
+                        name=op_name,
+                        operation_type=op_type,
+                    )
+                    discovery.categorised_operations.append(categorised)
+
+                    # Also populate type-specific lists
+                    if op_type == "workflow":
+                        discovery.workflow_operations.append(op_name)
+                    elif op_type == "llm":
+                        discovery.llm_operations.append(op_name)
+                    elif op_type == "tool":
+                        discovery.tool_operations.append(op_name)
+                else:
+                    discovery.categorised_operations.append(
+                        CategorisedOperation(name=op, operation_type="general")
+                    )
+
             if profile.llm_provider != "unknown":
                 discovery.llm_provider = profile.llm_provider
             if profile.framework != "unknown":
@@ -138,6 +183,9 @@ class ServiceDiscoveryAnalyzer:
             logger.info(
                 "code_analysis_complete",
                 operations=len(profile.span_operations),
+                workflows=len(discovery.workflow_operations),
+                llm_calls=len(discovery.llm_operations),
+                tools=len(discovery.tool_operations),
             )
         except Exception as e:
             logger.warning("code_analysis_failed", error=str(e))

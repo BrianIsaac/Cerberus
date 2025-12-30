@@ -74,49 +74,81 @@ class MetricProposer:
 
     PROPOSAL_PROMPT = '''You are designing personalised observability metrics for an AI agent service.
 
-## Service Discovery Results
+## Service Context
 
 **Service**: {service}
-**Domain**: {domain}
+**Domain**: {domain} (THIS IS THE KEY DOMAIN - metrics should be specific to this domain!)
 **Agent Type**: {agent_type}
 **LLM Provider**: {llm_provider}
 **Framework**: {framework}
 
-**Discovered Operations** (from code/traces):
-{operations}
+## Discovered Operations (Prioritised)
 
-**Existing Metrics** (already being collected):
+**MAIN WORKFLOW OPERATIONS** (primary business logic - FOCUS ON THESE):
+{workflow_operations}
+
+**LLM CALL OPERATIONS** (model invocations):
+{llm_operations}
+
+**TOOL/MCP OPERATIONS** (external tool calls):
+{tool_operations}
+
+**Other Operations**:
+{other_operations}
+
+**Existing Metrics** (already being collected - DO NOT DUPLICATE):
 {existing_metrics}
 
-**LLMObs Span Types**:
-{span_types}
+## CRITICAL: Domain-Specific vs Generic Metrics
+
+You MUST propose metrics specific to the **{domain}** domain and **{agent_type}** agent type.
+
+### WRONG - Generic/Infrastructure Metrics (DO NOT PROPOSE):
+- `service.request.count` - too generic
+- `service.llm.latency` - already in shared dashboard
+- `service.error.rate` - already in shared dashboard
+- `service.token.usage` - already in shared dashboard
+- `service.widget_group.design.count` - infrastructure, not domain-specific
+- `service.metric.provisioning.success` - infrastructure, not domain-specific
+
+### CORRECT - Domain-Specific Examples:
+
+For **SAS code generation** domain:
+- `sas_generator.code.generation.success` - count of successful SAS code generations
+- `sas_generator.syntax.validation.passed` - syntax check pass rate
+- `sas_generator.quality.score` - LLM-as-judge quality score distribution
+- `sas_generator.schema.fetch.latency` - MCP schema fetch latency
+- `sas_generator.procedure.usage` - count by SAS procedure type (PROC SQL, DATA step)
+
+For **Operations assistant** domain:
+- `ops_assistant.ticket.classification.accuracy` - classification quality
+- `ops_assistant.runbook.execution.success` - runbook completion rate
+- `ops_assistant.escalation.count` - human escalation frequency
+
+For **Dashboard enhancement** domain:
+- `dashboard_enhancer.analysis.operations_discovered` - discovery thoroughness
+- `dashboard_enhancer.widget.design.success` - widget design quality
 
 ## Your Task
 
-Propose 3-6 PERSONALISED metrics that are UNIQUE to this service's business logic and domain.
+Analyse the workflow operations above and propose 3-6 metrics that measure the **core business outcomes** of this {domain} service. The metric names should reflect what this service DOES in its domain, not how it's built.
 
-**DO NOT propose generic metrics like**:
-- Request count/latency (already in shared dashboard)
-- LLM call count/duration (already in shared dashboard)
-- Error rates (already in shared dashboard)
-- Token usage (already in shared dashboard)
-
-**DO propose domain-specific metrics like**:
-- For SAS generator: code_generation.success, syntax_validation.failures, template.usage
-- For Ops assistant: ticket.classification.accuracy, runbook.execution.success
-- For Dashboard enhancer: widget.generation.count, metric.provisioning.success
+Think about:
+1. What does success look like for a {agent_type} in the {domain} domain?
+2. What quality dimensions matter for the outputs?
+3. What steps in the workflow could fail that users care about?
 
 ## Output Format
 
 Return a JSON array of proposed metrics. Each metric must have:
-- metric_id: Snake_case identifier starting with service name (e.g., "sas_generator.code.success")
-- description: What this metric measures
+- metric_id: Snake_case identifier starting with service name (e.g., "{service_normalised}.code.generation.success")
+- description: What this metric measures IN DOMAIN TERMS
 - aggregation_type: "count" or "distribution"
-- filter_query: Span filter (e.g., "service:{service} @operation:generate_code")
+- filter_query: Span filter (e.g., "service:{service} @operation:generate_sas_code_agentic")
 - group_by: Optional array of {{"path": "@field", "tag_name": "tag"}}
 - widget_title: Human-readable title for dashboard widget
 - widget_type: "timeseries", "query_value", or "toplist"
-- rationale: Why this metric is valuable for this specific service
+- rationale: Why this metric is valuable for understanding {domain} performance
 
 Return ONLY the JSON array, no explanation.'''
 
@@ -146,17 +178,55 @@ Return ONLY the JSON array, no explanation.'''
             "proposing_metrics",
             service=discovery.service_name,
             domain=discovery.domain,
+            workflow_ops=len(discovery.workflow_operations),
+            llm_ops=len(discovery.llm_operations),
+            tool_ops=len(discovery.tool_operations),
         )
+
+        # Format categorised operations
+        workflow_ops = (
+            "\n".join(f"- {op}" for op in discovery.workflow_operations)
+            or "None discovered"
+        )
+        llm_ops = (
+            "\n".join(f"- {op}" for op in discovery.llm_operations)
+            or "None discovered"
+        )
+        tool_ops = (
+            "\n".join(f"- {op}" for op in discovery.tool_operations)
+            or "None discovered"
+        )
+
+        # Other operations that aren't categorised
+        categorised_names = set(
+            discovery.workflow_operations
+            + discovery.llm_operations
+            + discovery.tool_operations
+        )
+        other_ops = [
+            op for op in discovery.discovered_operations
+            if ":" not in op or op.split(":", 1)[1] not in categorised_names
+        ]
+        other_ops_str = (
+            "\n".join(f"- {op}" for op in other_ops[:10])
+            or "None"
+        )
+
+        # Normalise service name for metric IDs
+        service_normalised = discovery.service_name.replace("-", "_")
 
         prompt = self.PROPOSAL_PROMPT.format(
             service=discovery.service_name,
+            service_normalised=service_normalised,
             domain=discovery.domain,
             agent_type=discovery.agent_type,
             llm_provider=discovery.llm_provider,
             framework=discovery.framework,
-            operations="\n".join(f"- {op}" for op in discovery.discovered_operations) or "None discovered",
+            workflow_operations=workflow_ops,
+            llm_operations=llm_ops,
+            tool_operations=tool_ops,
+            other_operations=other_ops_str,
             existing_metrics="\n".join(f"- {m}" for m in discovery.discovered_metrics) or "None found",
-            span_types=", ".join(discovery.llmobs_span_types) or "None found",
         )
 
         response = await self.client.aio.models.generate_content(

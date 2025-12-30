@@ -672,7 +672,8 @@ class CodeAnalyzer:
         for func in functions:
             func_name = func["name"]
             for pattern, span_type in self.SPAN_TYPE_PATTERNS.items():
-                pattern_regex = rf'{pattern}\([^)]*\)\s*\n\s*(async\s+)?def\s+{func_name}'
+                # Match both @decorator and @decorator(...) forms
+                pattern_regex = rf'{pattern}(?:\([^)]*\))?\s*\n\s*(async\s+)?def\s+{func_name}'
                 if re.search(pattern_regex, content):
                     operations.append(f"{span_type}:{func_name}")
                     break
