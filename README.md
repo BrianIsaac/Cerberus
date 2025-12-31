@@ -1,4 +1,4 @@
-# Ops Assistant: Scalable Dynamic Multi-Agent Observability Platform
+# Cerberus: Scalable Dynamic Multi-Agent Observability Platform
 
 **AI Partner Catalyst: Accelerate Innovation** — Datadog LLM Observability Challenge
 
@@ -315,6 +315,322 @@ Rather than treating governance as an afterthought, this solution treats **gover
 | Human Approval | Required for incidents | `ai_agent.handoff_required` |
 
 This makes AI agent behaviour **predictable, debuggable, and continuously improvable** through standard SRE practices.
+
+---
+
+## Competition Requirements Achievement
+
+**Datadog AI Agents Competition** — How each requirement was achieved.
+
+**Public Dashboard URL**: https://p.ap1.datadoghq.com/sb/9c600638-dc7c-11f0-b6b4-561844e885ae-c547a3d20805be1c166be03cd945f6d3
+
+### Requirement 1: In-Datadog View for Application Health
+
+> Provide an in-Datadog view that clearly shows your application health (e.g. latency/errors/tokens/cost), SLOs, and actionable items from the detection rules you defined.
+
+The **"AI Agent Fleet Health"** dashboard provides a comprehensive view of application health across our 3-agent fleet (ops-assistant, sas-generator, dashboard-enhancer).
+
+![Full Dashboard Overview](images/01-dashboard-overview.png)
+
+#### Fleet Overview Section
+
+![Fleet Overview and Application Health](images/02-fleet-overview.png)
+
+| Widget | Metric Query | Purpose |
+|--------|--------------|---------|
+| **Total Agents Active** | `count_nonzero(avg:trace.fastapi.request.hits{team:ai-agents} by {service})` | Shows 3 active agents |
+| **Request Volume by Agent** | `sum:trace.fastapi.request.hits{*} by {service}.as_count()` | Traffic distribution |
+| **Error Rate by Agent (%)** | Formula: `(errors / hits) * 100` | Error visibility per agent |
+| **P95 Latency by Agent (s)** | `p95:trace.fastapi.request{*} by {service}` | Latency performance |
+
+#### Application Health Section
+
+| Widget | Description |
+|--------|-------------|
+| **Request Volume** | Time-series of `sum:trace.fastapi.request.hits{*}.as_count()` |
+| **P95 Request Latency** | With **SLO Threshold (10s)** marker line |
+| **Error Rate (%)** | Query value widget showing current error percentage |
+| **Gemini LLM Latency (P95)** | `p95:trace.google_genai.request{*}` for LLM performance |
+
+#### Token/Cost Tracking
+
+![Quality Evaluations with Token Metrics](images/05-quality-evaluations.png)
+
+| Widget | Metric | Purpose |
+|--------|--------|---------|
+| **LLM Input Tokens** | `sum:ai_agent.llm.tokens.input{*}` | Input token consumption |
+| **LLM Output Tokens** | `sum:ai_agent.llm.tokens.output{*}` | Output token consumption |
+| **LLM Call Volume** | `sum:trace.google_genai.request.hits{*}.as_count()` | API call frequency |
+| **LLM Span Duration (P95)** | `p95:trace.google_genai.request{*}` | LLM response time |
+
+#### SLO Visibility
+
+- **P95 Request Latency chart**: Green dashed line at **10 seconds** (SLO threshold)
+- **Budget Utilisation chart**: Orange dashed line at **80%** (warning threshold)
+- **Quality Scores chart**: Red dashed line at **0.7** (approval threshold)
+
+#### Actionable Items Panel
+
+![Operations and Actionable Items](images/06-operations-actionable-items.png)
+
+- **Monitor Status Panel**: Shows alerts, OK, and No Data counts across monitors
+- **Active Incidents**: Count of open incidents
+- **Slowest Endpoints (P95 Latency)**: Identifies performance bottlenecks
+
+---
+
+### Requirement 2: Actionable Record (Incident/Case Management)
+
+> Create an actionable record inside Datadog with clear contextual information to drive next steps. (Incident Management or Case Management)
+
+Monitors are configured to automatically create incidents with comprehensive context when triggered.
+
+#### Monitor-to-Incident Flow
+
+Each monitor in `infra/datadog/monitors.json` includes structured alert messages:
+
+```json
+{
+  "name": "AI Agent Fleet - Security Violation Spike",
+  "message": "## Summary\nSecurity validation failures detected across AI agent fleet.\n\n## Impact\n- Potential prompt injection or attack attempts\n- Security policy enforcement active\n\n## What Triggered\n- Monitor: Fleet Security Violation Spike\n- Window: Last 5 minutes\n- Threshold: violations > 3\n- Violation count: {{value}}\n\n## Next Actions\n- [ ] Review blocked requests immediately\n- [ ] Check for attack patterns\n- [ ] Verify security validator rules\n\n@ops-oncall @security-team"
+}
+```
+
+#### Notification Channels
+
+| Monitor Type | Notification Channels |
+|--------------|----------------------|
+| Security Violations | `@ops-oncall @security-team` |
+| PII Detection | `@ops-oncall @privacy-team` |
+| Quality Issues | `@ops-oncall @ml-team` |
+| Approval Backlog | `@ops-oncall @approval-team` |
+
+---
+
+### Requirement 3: Vertex AI or Gemini as Model Host
+
+> Applications must leverage Vertex AI or Gemini as the model host.
+
+All three agents use **Google Gemini via Vertex AI**.
+
+#### Client Initialisation Pattern
+
+```python
+# sas_generator/workflow.py
+def get_genai_client() -> genai.Client:
+    return genai.Client(
+        vertexai=True,
+        project=settings.gcp_project_id,
+        location=settings.gcp_location,
+    )
+```
+
+#### Models Used Across Fleet
+
+| Service | Model | Use Case |
+|---------|-------|----------|
+| ops-assistant | `gemini-1.5-flash` | Intent classification, synthesis |
+| sas-generator | `gemini-2.0-flash-exp` | SAS code generation, quality evaluation |
+| dashboard-enhancer | `gemini-2.0-flash-001` | Widget design, domain evaluation |
+
+#### Dashboard Evidence
+
+![LLM and Workflow Calls](images/04-llm-workflow-calls.png)
+
+| Widget | Metric |
+|--------|--------|
+| Gemini LLM Calls Over Time | `sum:trace.google_genai.request.hits{*}.as_count()` |
+| Gemini LLM Latency (avg vs P95) | `avg:trace.google_genai.request{*}` / `p95:trace.google_genai.request{*}` |
+
+---
+
+### Requirement 4: Telemetry Data Reporting
+
+> Report your application telemetry data to Datadog (e.g., LLM observability signals, APM, logs, infrastructure metrics, RUM, etc.)
+
+The application implements a comprehensive multi-layer observability strategy.
+
+#### 1. LLM Observability (ddtrace LLMObs)
+
+```python
+# ops_triage_agent/observability.py
+def setup_llm_observability():
+    LLMObs.enable(
+        ml_app=settings.dd_service,
+        api_key=settings.dd_api_key,
+        site=settings.dd_site,
+        agentless_enabled=True,
+        integrations_enabled=True,
+    )
+```
+
+#### LLMObs Decorators Used
+
+| Decorator | Purpose |
+|-----------|---------|
+| `@workflow` | Wraps entire code generation flow |
+| `@llm(model_name="gemini-2.0-flash-exp", model_provider="google")` | Traces LLM calls |
+| `@tool(name="get_schema")` | Traces tool invocations |
+| `LLMObs.agent(name="agent.intake")` | Agent span creation |
+
+#### 2. APM Instrumentation (ddtrace-run)
+
+```dockerfile
+ENTRYPOINT ["ddtrace-run"]
+CMD ["uvicorn", "ops_triage_agent.main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+ENV DD_TRACE_ENABLED=true
+ENV DD_LOGS_INJECTION=true
+ENV DD_LLMOBS_ENABLED=1
+```
+
+#### 3. Custom Metrics (DogStatsD)
+
+| Metric | Type | Purpose |
+|--------|------|---------|
+| `ai_agent.request.latency` | Histogram | Request duration |
+| `ai_agent.llm.tokens.input` | Gauge | Input token count |
+| `ai_agent.llm.tokens.output` | Gauge | Output token count |
+| `ai_agent.governance.escalation` | Counter | Escalation events |
+| `ai_agent.governance.budget_utilisation` | Gauge | Budget consumption |
+| `ai_agent.quality.score` | Gauge | Quality evaluations |
+
+#### 4. Infrastructure Metrics (Datadog Sidecar)
+
+```yaml
+# infra/cloudrun/sas-generator-api-sidecar.yaml
+- name: datadog-agent
+  image: gcr.io/datadoghq/serverless-init:latest
+  env:
+    - name: DD_APM_ENABLED
+      value: "true"
+    - name: DD_DOGSTATSD_PORT
+      value: "8125"
+    - name: DD_LOGS_ENABLED
+      value: "true"
+```
+
+---
+
+### Requirement 5: At Least 3 Detection Rules
+
+> Define at least 3 detection rules in Datadog to evaluate application signals and determine when the app requires attention (e.g., monitors/SLOs).
+
+We defined **6 monitors** and **4 SLOs** for a total of **10 detection rules**.
+
+#### Monitors (6 Total)
+
+| Monitor | Query | Threshold |
+|---------|-------|-----------|
+| **Governance Escalation Rate** | `sum:ai_agent.governance.escalation{team:ai-agents}.as_count()` | > 10 (15m) |
+| **Security Violation Spike** | `sum:ai_agent.governance.escalation{reason:security_violation}.as_count()` | > 3 (5m) |
+| **PII Detection** | `sum:ai_agent.governance.escalation{reason:pii_detected}.as_count()` | > 0 (15m) |
+| **Budget Utilisation High** | `avg:ai_agent.governance.budget_utilisation{team:ai-agents}` | > 0.8 |
+| **Approval Queue Backlog** | `sum:ai_agent.governance.approval_pending{team:ai-agents}.as_count()` | > 20 (5m) |
+| **Low Quality Score** | `avg:ai_agent.quality_score{score_type:code_quality}` | < 0.7 |
+
+#### SLOs (4 Total)
+
+| SLO | Target | Timeframe |
+|-----|--------|-----------|
+| **Availability SLO** | 99.9% requests complete without errors | 30d |
+| **Latency SLO** | 95% of time, P95 latency < 10s | 30d |
+| **Governance SLO** | 99% requests within step budgets, no tool failures | 30d |
+| **Quality SLO (Hallucination-Free)** | 99.5% requests without hallucinations | 30d |
+
+---
+
+### Requirement 6: Actionable Record with Contextual Information
+
+> Create an actionable record inside Datadog with clear contextual information to drive next steps (E.g. Signal Data, Runbook, context around the signal).
+
+Every monitor alert includes structured contextual information:
+
+```markdown
+## Summary
+[Clear description of the issue]
+
+## Impact
+- [Business impact bullet points]
+- Team: {{team.name}}
+
+## What Triggered
+- Monitor: [Monitor Name]
+- Window: [Evaluation window]
+- Threshold: [Condition]
+- Current value: {{value}}
+
+## Next Actions
+- [ ] [Actionable step 1]
+- [ ] [Actionable step 2]
+- [ ] [Actionable step 3]
+
+@[notification-channel]
+```
+
+#### Contextual Information Types
+
+| Context Type | Example |
+|--------------|---------|
+| **Signal Data** | `{{value}}`, `{{team.name}}` template variables |
+| **Threshold Info** | "violations > 3" in What Triggered section |
+| **Runbook Steps** | Checklist items in Next Actions section |
+| **Escalation Path** | `@ops-oncall @security-team` notifications |
+
+---
+
+### Requirement 7: Comprehensive Dashboard View
+
+> Provide an in-Datadog view that clearly shows application health from the relevant signals collected, detection rules status and any actionable items status derived from your detection rules.
+
+The **"AI Agent Fleet Health"** dashboard combines all requirements into a unified view with 7 widget groups and 30+ widgets.
+
+#### Dashboard Structure
+
+| Group | Widgets | Purpose |
+|-------|---------|---------|
+| **Fleet Overview** | 4 | High-level fleet health metrics |
+| **Application Health** | 4 | Request metrics, latency, errors, LLM performance |
+| **Governance & Bounded Autonomy** | 8 | Escalations, budgets, approvals, quality scores |
+| **LLM & Workflow Calls** | 4 | Gemini calls, LangGraph workflows |
+| **MCP Tools Performance** | 4 | Tool invocations, latency, errors |
+| **Quality Evaluations** | 6 | Faithfulness, relevancy, token usage |
+| **Operations & Actionable Items** | 3 | Monitor status, incidents, slow endpoints |
+
+#### Governance & Bounded Autonomy Section
+
+![Governance and Bounded Autonomy](images/03-governance-bounded-autonomy.png)
+
+| Widget | Metric | Purpose |
+|--------|--------|---------|
+| **Escalation Rate (%)** | Formula calculation | Percentage of requests requiring escalation |
+| **Escalations by Reason** | `sum:ai_agent.governance.escalation{*} by {reason}` | Breakdown by cause |
+| **Budget Utilisation by Type** | `avg:ai_agent.governance.budget_utilisation{*} by {budget_type}` | Step/model/tool budgets |
+| **Top Escalation Reasons** | TopList widget | Most common escalation causes |
+
+#### Visual Threshold Markers
+
+| Chart | Marker | Value |
+|-------|--------|-------|
+| P95 Request Latency | SLO Threshold | 10s |
+| Budget Utilisation | Warning Threshold | 80% |
+| Quality Scores | Approval Threshold | 0.7 |
+
+---
+
+### Requirements Summary
+
+| Requirement | Implementation | Evidence |
+|-------------|----------------|----------|
+| **1. Application Health View** | AI Agent Fleet Health dashboard with 7 widget groups | Screenshots in `images/` |
+| **2. Incident Management** | Monitor alerts auto-create incidents with context | `monitors.json` message templates |
+| **3. Vertex AI/Gemini** | All 3 agents use `google.genai` with `vertexai=True` | Code in `workflow.py`, `nodes.py` |
+| **4. Telemetry Reporting** | LLMObs, APM, logs, DogStatsD, sidecar | `observability.py`, `metrics.py` |
+| **5. Detection Rules** | 6 monitors + 4 SLOs = 10 rules | `monitors.json`, `slos.json` |
+| **6. Contextual Records** | Structured alert messages with runbooks | Monitor message templates |
+| **7. Comprehensive View** | Dashboard combines health, rules, actionable items | Operations section |
+
+---
 
 ## Tech Stack
 
