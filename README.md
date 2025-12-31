@@ -31,23 +31,36 @@ security = create_security_validator("my-agent")
 
 ### 2. Dynamic Personalised Observability Agent
 
-Beyond shared governance, the **Dashboard Enhancement Agent** automatically creates domain-specific observability for each agent:
+Beyond shared governance, the **Dashboard Enhancement Agent** automatically creates domain-specific observability for each agent using a two-phase workflow:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                     DASHBOARD ENHANCEMENT AGENT                              │
 │                                                                              │
-│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
-│   │  Discovery  │───>│  Proposer   │───>│ Provisioner │───>│  Designer   │  │
-│   │             │    │   (LLM)     │    │             │    │   (LLM)     │  │
-│   │ • Code      │    │             │    │             │    │             │  │
-│   │ • Telemetry │    │ Domain-     │    │ Span-based  │    │ Personalised│  │
-│   │ • LLMObs    │    │ specific    │    │ metrics in  │    │ widget      │  │
-│   │             │    │ metrics     │    │ Datadog     │    │ group       │  │
-│   └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘  │
+│  PHASE 1: Analyse & Preview (/analyze) - No resources created               │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                      │
+│  │  Discovery  │───>│  Proposer   │───>│  Designer   │                      │
+│  │             │    │   (LLM)     │    │  (Preview)  │                      │
+│  │ • Code      │    │             │    │             │                      │
+│  │ • Telemetry │    │ Domain-     │    │ Widget      │                      │
+│  │ • LLMObs    │    │ specific    │    │ preview     │                      │
+│  │             │    │ metrics     │    │ JSON        │                      │
+│  └─────────────┘    └─────────────┘    └─────────────┘                      │
+│                              │                                               │
+│                              ▼ trace_id returned for Phase 2                 │
+│                                                                              │
+│  PHASE 2: Provision & Apply (/provision/{trace_id}) - Creates resources     │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                      │
+│  │ Provisioner │───>│  Designer   │───>│   Apply     │                      │
+│  │             │    │   (Final)   │    │             │                      │
+│  │ Span-based  │    │             │    │ Add widget  │                      │
+│  │ metrics in  │    │ Real query  │    │ group to    │                      │
+│  │ Datadog     │    │ templates   │    │ dashboard   │                      │
+│  └─────────────┘    └─────────────┘    └─────────────┘                      │
 │                                                                              │
 │   Input: service name, code path/GitHub URL, agent profile                   │
 │   Output: Provisioned metrics + widget group added to fleet dashboard        │
+│   Rollback: DELETE /rollback/{trace_id} removes provisioned metrics         │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -127,10 +140,10 @@ What sets this solution apart is the **scalable, self-referential observability 
 |-------------|----------------|
 | **Vertex AI / Gemini** | Google Gemini 2.0 Flash via Vertex AI |
 | **Telemetry to Datadog** | APM, LLM Observability, Logs, Custom Metrics |
-| **3+ Detection Rules** | 9 monitors with incident automation |
+| **3+ Detection Rules** | 6 monitors with incident automation |
 | **Actionable Records** | Auto-created incidents with context, runbooks, and signal data |
 | **In-Datadog View** | 7-section dashboard with fleet overview and service filtering |
-| **Traffic Generator** | 8-mode script demonstrating all detection rules |
+| **Traffic Generator** | 12-mode script demonstrating all detection rules |
 
 ## Hosted Applications
 
@@ -235,15 +248,13 @@ if security_validator.validate_input(user_input):
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `ai_agent.governance.step_count` | Gauge | Current step count |
-| `ai_agent.governance.budget_remaining` | Gauge | Steps remaining before limit |
-| `ai_agent.governance.budget_exceeded` | Counter | Budget violation events |
-| `ai_agent.security.prompt_injection_blocked` | Counter | Blocked injection attempts |
-| `ai_agent.security.pii_detected` | Counter | PII detection events |
-| `ai_agent.escalation.handoff_required` | Counter | Human escalation events |
-| `ai_agent.approval.pending` | Gauge | Pending approval requests |
-| `ai_agent.approval.approved` | Counter | Approved actions |
-| `ai_agent.approval.rejected` | Counter | Rejected actions |
+| `ai_agent.governance.budget_remaining` | Gauge | Remaining budget by type (step/model/tool) |
+| `ai_agent.governance.budget_utilisation` | Gauge | Budget consumption percentage (0-1) |
+| `ai_agent.governance.escalation` | Counter | Escalation events by reason |
+| `ai_agent.governance.security_check` | Counter | Security validation results |
+| `ai_agent.governance.approval_requested` | Counter | Approval gate requests |
+| `ai_agent.governance.approval_decision` | Counter | Approval decisions by status |
+| `ai_agent.governance.approval_latency` | Histogram | Time to human decision (ms) |
 
 ### Standard Metrics
 
@@ -253,8 +264,12 @@ if security_validator.validate_input(user_input):
 | `ai_agent.request.latency` | Histogram | End-to-end latency (ms) |
 | `ai_agent.request.error` | Counter | Failed requests |
 | `ai_agent.llm.calls` | Counter | LLM invocations |
+| `ai_agent.llm.latency` | Histogram | LLM response time (ms) |
+| `ai_agent.llm.tokens.input` | Gauge | Input tokens |
+| `ai_agent.llm.tokens.output` | Gauge | Output tokens |
 | `ai_agent.tool.calls` | Counter | Tool invocations |
 | `ai_agent.tool.errors` | Counter | Tool failures |
+| `ai_agent.tool.latency` | Histogram | Tool execution time (ms) |
 | `ai_agent.quality.score` | Gauge | Quality evaluation score (0-1) |
 | `ai_agent.step_budget_exceeded` | Counter | Runaway agent events |
 | `ai_agent.handoff_required` | Counter | Human escalation events |
@@ -271,21 +286,18 @@ if security_validator.validate_input(user_input):
 | **Operations** | Monitor status panel, incidents/cases, worst traces |
 | **SAS Query Generator** | Query volume, generation latency, user feedback, error rate |
 
-### Detection Rules (9 Monitors)
+### Detection Rules (6 Monitors)
 
-All monitors use `team:ai-agents by {service}` for fleet-wide coverage with per-agent alerting:
+All monitors use `team:ai-agents` for fleet-wide coverage:
 
 | Monitor | Threshold | Severity | Rationale |
 |---------|-----------|----------|-----------|
-| **High P95 Latency** | >10s | P3 | User experience degradation |
-| **Agent Step Budget Exceeded** | >0 events | P3 | Runaway agent detection |
-| **Tool Error Rate Spike** | >10% | P2 | MCP/Datadog API issues |
-| **Quality Degradation** | faithfulness <0.7 | P2 | Model output quality drop |
-| **Hallucination Rate High** | >10% | P1 | Critical accuracy issue |
-| **PII Detection Alert** | any PII detected | P1 | Data privacy violation |
-| **MCP Server Connection Issues** | >5 errors | P1 | Infrastructure failure |
-| **Token Budget Spike** | >50k tokens | P3 | Cost anomaly detection |
-| **LLM Error Rate Spike** | >5% | P2 | Service reliability issues |
+| **Governance Escalation Rate** | >10 escalations (15m) | P2 | High rate of agent escalations to humans |
+| **Security Violation Spike** | >3 violations (5m) | P1 | Prompt injection or attack attempts |
+| **PII Detection** | any PII detected | P1 | Data privacy violation |
+| **Budget Utilisation High** | >80% utilisation | P2 | Agents frequently approaching limits |
+| **Approval Queue Backlog** | >20 pending (5m) | P2 | Human review bottleneck |
+| **Low Quality Score** | <0.7 quality score | P2 | LLM-as-judge quality degradation |
 
 **Each monitor automatically creates an incident with:**
 - Signal data (metric values, timestamps, affected services)
@@ -813,8 +825,9 @@ uv run python scripts/traffic_gen.py --service fleet --rps 0.5 --duration 60
 | `hallucination` | Fictional service scenarios | Quality Degradation, Hallucination Rate |
 | `pii_test` | Queries containing PII data | PII Detection Alert |
 | `low_confidence` | Ambiguous/vague questions | Escalation metrics |
+| `approval` | Write intent prompts (create incident/case) | Approval gate, review workflow |
 | `mcp_health` | Invalid tool calls | MCP Connection Issues |
-| `governance` | Combined governance tests (PII, injection, budget) | Security, Escalation monitors |
+| `governance` | Combined governance tests (PII, injection, budget, approval) | Security, Escalation monitors |
 | `prompt_injection` | Injection attack patterns | Security Validator |
 | `all` | Runs all modes sequentially | All monitors |
 
@@ -915,7 +928,7 @@ ops-assistant/
 │   ├── security.py             # Prompt injection & PII detection
 │   ├── evaluation.py           # Custom quality evaluations
 │   ├── agent/                  # LangGraph workflow
-│   │   ├── workflow.py         # 8-node state machine
+│   │   ├── workflow.py         # 7-node state machine
 │   │   ├── state.py            # TypedDict state schema
 │   │   └── nodes.py            # Node implementations
 │   ├── mcp_client/             # MCP client wrapper
@@ -960,7 +973,7 @@ ops-assistant/
 │   ├── onboard_agent.py        # Automated agent onboarding
 │   ├── create_monitor.py       # Monitor configuration factory (7 types)
 │   ├── create_slo.py           # SLO configuration factory (6 types)
-│   ├── traffic_gen.py          # 8-mode traffic generator
+│   ├── traffic_gen.py          # 12-mode traffic generator
 │   └── test_shared_observability.py  # Metric submission test
 │
 ├── infra/
@@ -970,7 +983,7 @@ ops-assistant/
 │   │   └── deploy.sh           # Deployment scripts
 │   └── datadog/                # Datadog configuration
 │       ├── dashboard.json      # 7-section unified dashboard
-│       ├── monitors.json       # 9 fleet-wide detection rules
+│       ├── monitors.json       # 6 fleet-wide detection rules
 │       ├── slos.json           # 4 fleet-wide SLO definitions
 │       └── apply_config.sh     # Configuration deployment
 │
