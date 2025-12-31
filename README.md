@@ -6,7 +6,7 @@ A production-grade observability framework for AI agents using Datadog. Any new 
 
 ## The Innovation: Two-Part Scalable AI Agent Observability
 
-This solution implements the governance principles from ["Practices for Governing Agentic AI Systems"](https://arxiv.org/pdf/2512.04123) (OpenAI et al., 2024) combined with a novel **Dynamic Personalised Observability Agent**:
+This solution implements governance principles informed by ["Measuring Agents in Production"](https://arxiv.org/pdf/2512.04123) (Pan et al., 2025) combined with a novel **Dynamic Personalised Observability Agent**:
 
 ### 1. Governance-First Agent Onboarding
 
@@ -117,7 +117,7 @@ What sets this solution apart is the **scalable, self-referential observability 
 ```
 
 **Key innovations:**
-1. **Governance-as-Code**: All agents inherit bounded autonomy from `shared/governance/` based on [OpenAI's governance paper](https://arxiv.org/pdf/2512.04123)
+1. **Governance-as-Code**: All agents inherit bounded autonomy from `shared/governance/` based on ["Measuring Agents in Production"](https://arxiv.org/pdf/2512.04123)
 2. **Dynamic Observability**: The Dashboard Enhancement Agent analyses new agents and creates personalised metrics/widgets automatically
 3. **Fleet-Wide + Per-Agent**: `team:ai-agents` tag enables fleet monitoring, `service:<name>` enables drill-down, personalised widget groups provide domain-specific insights
 
