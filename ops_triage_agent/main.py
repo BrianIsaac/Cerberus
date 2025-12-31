@@ -28,6 +28,7 @@ from ops_triage_agent.observability import (
     setup_custom_metrics,
     setup_llm_observability,
 )
+from shared.observability import emit_request_start
 
 configure_logging()
 logger = structlog.get_logger()
@@ -116,6 +117,8 @@ async def ask(request: AskRequest) -> AskResponse:
     """
     start_time = time.time()
     trace_id = str(uuid.uuid4())
+
+    emit_request_start(service="ops-assistant", agent_type="triage")
 
     logger.info(
         "ask_request_received",
@@ -207,6 +210,8 @@ async def triage(request: TriageRequest) -> TriageResponse:
     """
     start_time = time.time()
     trace_id = str(uuid.uuid4())
+
+    emit_request_start(service="ops-assistant", agent_type="triage")
 
     logger.info(
         "triage_request_received",

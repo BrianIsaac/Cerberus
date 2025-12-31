@@ -153,7 +153,7 @@ What sets this solution apart is the **scalable, self-referential observability 
 
 | Resource | Link |
 |----------|------|
-| **Dashboard** | https://p.ap1.datadoghq.com/sb/9c600638-dc7c-11f0-b6b4-561844e885ae-4f6b61b1c0c35991632fd8fa013b29fb |
+| **Dashboard** | https://p.ap1.datadoghq.com/sb/9c600638-dc7c-11f0-b6b4-561844e885ae-c547a3d20805be1c166be03cd945f6d3 |
 | **LLM Obs Traces** | https://ap1.datadoghq.com/llm/traces?query=%40ml_app%3Aops-assistant |
 | **Monitors** | https://ap1.datadoghq.com/monitors/manage?q=team%3Aai-agents |
 | **SLOs** | https://ap1.datadoghq.com/slo?query=team%3Aai-agents |

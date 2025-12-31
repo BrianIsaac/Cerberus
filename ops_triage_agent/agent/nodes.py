@@ -38,6 +38,7 @@ from shared.governance.escalation import EscalationHandler
 from ops_triage_agent.observability import (
     emit_budget_exceeded,
     emit_escalation,
+    emit_llm_tokens,
     emit_quality_metric,
     emit_review_outcome,
 )
@@ -204,6 +205,13 @@ def intake_node(state: AgentState) -> dict[str, Any]:
                 response_mime_type="application/json",
             ),
         )
+
+        # Emit token metrics if usage metadata is available
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            emit_llm_tokens(
+                tokens_in=getattr(response.usage_metadata, "prompt_token_count", 0) or 0,
+                tokens_out=getattr(response.usage_metadata, "candidates_token_count", 0) or 0,
+            )
 
         # Parse response
         try:
@@ -595,6 +603,13 @@ Traces: {traces_str[:1000]}"""
             ),
         )
 
+        # Emit token metrics if usage metadata is available
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            emit_llm_tokens(
+                tokens_in=getattr(response.usage_metadata, "prompt_token_count", 0) or 0,
+                tokens_out=getattr(response.usage_metadata, "candidates_token_count", 0) or 0,
+            )
+
         # Parse response
         try:
             result = json.loads(response.text)
@@ -659,8 +674,8 @@ Traces: {traces_str[:1000]}"""
                     answer_relevancy=answer_relevancy_score,
                 )
 
-                emit_quality_metric("ragas_faithfulness", faithfulness_score)
-                emit_quality_metric("ragas_answer_relevancy", answer_relevancy_score)
+                emit_quality_metric("faithfulness", faithfulness_score)
+                emit_quality_metric("answer_relevancy", answer_relevancy_score)
 
             except Exception as e:
                 logger.error("ragas_evaluation_failed", error=str(e))

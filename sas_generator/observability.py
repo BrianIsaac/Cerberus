@@ -34,11 +34,14 @@ def setup_custom_metrics() -> None:
     """Initialise DogStatsD for custom metrics emission.
 
     Connects to localhost:8125 where the Datadog sidecar listens.
+
+    Note: No statsd_namespace is set because metric names in
+    shared.observability.constants and shared.governance.constants
+    already include the 'ai_agent.' prefix (e.g., 'ai_agent.governance.budget_utilisation').
     """
     dd_initialize(
         statsd_host="localhost",
         statsd_port=8125,
-        statsd_namespace="ai_agent",
     )
 
 

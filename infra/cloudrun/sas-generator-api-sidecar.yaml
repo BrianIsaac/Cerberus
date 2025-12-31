@@ -77,6 +77,8 @@ spec:
               value: sas-generator
             - name: DD_LLMOBS_AGENTLESS_ENABLED
               value: "1"
+            - name: DD_LLMOBS_EVALUATORS
+              value: "ragas_faithfulness,ragas_answer_relevancy"
             # Application configuration
             - name: GOOGLE_CLOUD_PROJECT
               value: project-0c3b1832-f911-481b-a03
@@ -91,6 +93,11 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: DD_API_KEY
+                  key: latest
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: OPENAI_API_KEY
                   key: latest
           startupProbe:
             tcpSocket:

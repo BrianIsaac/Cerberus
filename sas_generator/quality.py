@@ -40,10 +40,16 @@ Respond with a JSON object:
     "best_practices_score": 0.0-1.0,
     "completeness_score": 0.0-1.0,
     "safety_score": 0.0-1.0,
+    "faithfulness": 0.0-1.0,
+    "answer_relevancy": 0.0-1.0,
     "issues": ["list of specific issues found"],
     "suggestions": ["list of improvement suggestions"],
     "approved": true/false
 }}
+
+Note:
+- faithfulness: How well the code stays true to the user's intent without hallucinating functionality
+- answer_relevancy: How relevant and focused the code is to answering the specific query
 """
 
 
@@ -109,6 +115,18 @@ async def evaluate_code_quality(
             result.get("best_practices_score", 0.0),
             "best_practices_score",
         )
+        emit_quality_score(
+            service,
+            agent_type,
+            result.get("faithfulness", 0.0),
+            "faithfulness",
+        )
+        emit_quality_score(
+            service,
+            agent_type,
+            result.get("answer_relevancy", 0.0),
+            "answer_relevancy",
+        )
 
         logger.info(
             "Code quality evaluation complete",
@@ -129,6 +147,8 @@ async def evaluate_code_quality(
             "best_practices_score": 0.0,
             "completeness_score": 0.0,
             "safety_score": 0.0,
+            "faithfulness": 0.0,
+            "answer_relevancy": 0.0,
             "approved": False,
             "issues": [f"Quality evaluation failed: {str(e)}"],
             "suggestions": ["Manual review required"],

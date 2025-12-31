@@ -16,6 +16,7 @@ from sas_generator.observability import (
     setup_custom_metrics,
     setup_llm_observability,
 )
+from shared.observability import emit_request_start
 from sas_generator.workflow import generate_sas_code_agentic
 
 configure_logging()
@@ -132,6 +133,8 @@ async def generate(request: GenerateRequest) -> GenerateResponse:
     """
     trace_id = str(uuid.uuid4())
     start_time = time.time()
+
+    emit_request_start(service="sas-generator", agent_type="code-generation")
 
     logger.info(
         "generate_request_received",

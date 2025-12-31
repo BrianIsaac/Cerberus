@@ -24,6 +24,9 @@ from shared.observability import (
 from shared.observability import (
     emit_tool_error as shared_emit_tool_error,
 )
+from shared.observability import (
+    emit_llm_call as shared_emit_llm_call,
+)
 
 # Agent configuration for shared observability
 AGENT_SERVICE = "ops-assistant"
@@ -51,11 +54,15 @@ def setup_llm_observability():
 
 
 def setup_custom_metrics():
-    """Initialise DogStatsD for custom metrics emission."""
+    """Initialise DogStatsD for custom metrics emission.
+
+    Note: No statsd_namespace is set because metric names in
+    shared.observability.constants and shared.governance.constants
+    already include the 'ai_agent.' prefix (e.g., 'ai_agent.governance.budget_utilisation').
+    """
     dd_initialize(
         statsd_host=os.getenv("DD_AGENT_HOST", "localhost"),
         statsd_port=int(os.getenv("DD_DOGSTATSD_PORT", "8125")),
-        statsd_namespace="ops_assistant",
     )
 
 
@@ -155,6 +162,23 @@ def emit_quality_metric(metric_name: str, value: float, tags: Optional[list[str]
         agent_type=AGENT_TYPE,
         score=value,
         metric_name=metric_name,
+    )
+
+
+def emit_llm_tokens(tokens_in: int, tokens_out: int, latency_ms: float = 0.0):
+    """Emit metrics for LLM token usage.
+
+    Args:
+        tokens_in: Number of input tokens.
+        tokens_out: Number of output tokens.
+        latency_ms: LLM call latency in milliseconds.
+    """
+    shared_emit_llm_call(
+        service=AGENT_SERVICE,
+        agent_type=AGENT_TYPE,
+        latency_ms=latency_ms,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
     )
 
 

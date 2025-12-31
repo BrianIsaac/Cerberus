@@ -28,6 +28,7 @@ from .observability import (
     setup_custom_metrics,
     setup_llm_observability,
 )
+from shared.observability import emit_request_start
 from .workflow import (
     analyze_and_preview,
     apply_enhancement,
@@ -129,6 +130,8 @@ async def enhance(request: EnhanceRequest):
     """
     trace_id = str(uuid.uuid4())
     start_time = time.time()
+
+    emit_request_start(service="dashboard-enhancer", agent_type="analysis")
 
     structlog.contextvars.bind_contextvars(
         trace_id=trace_id,
@@ -255,6 +258,8 @@ async def approve(request: ApprovalRequest):
     Returns:
         Result of applying the enhancement.
     """
+    emit_request_start(service="dashboard-enhancer", agent_type="analysis")
+
     structlog.contextvars.bind_contextvars(trace_id=request.trace_id)
 
     logger.info("approval_received", outcome=request.outcome)
@@ -396,6 +401,8 @@ async def analyze(request: EnhanceRequest):
         Preview of proposed metrics and widgets.
     """
     trace_id = str(uuid.uuid4())[:8]
+
+    emit_request_start(service="dashboard-enhancer", agent_type="analysis")
 
     structlog.contextvars.bind_contextvars(
         trace_id=trace_id,
