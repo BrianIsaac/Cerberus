@@ -1045,22 +1045,90 @@ All required Datadog configuration exports are in `submission/`:
 
 [Link to 3-minute video walkthrough]
 
-Topics covered:
-1. Observability strategy and three-layer telemetry approach
-2. Detection rules rationale and threshold selection
-3. Innovation: self-referential monitoring and multi-agent scalability
-4. Challenges faced and solutions implemented
+> *"Explain your observability strategy, the thought process behind your detection rules, what sets you apart from an innovation perspective and any challenges you faced."*
 
-## Challenges and Solutions
+### Innovation 1: Governance-First Agent Onboarding
+
+The `shared/governance/` module implements bounded autonomy controls that automatically emit observability signals. Every agent onboarded to Cerberus receives:
+
+**Governance Components:**
+- **BudgetTracker**: Tracks steps (max 8), model calls (max 5), tool calls (max 6) — emits `ai_agent.governance.budget_utilisation` on every increment
+- **SecurityValidator**: Detects prompt injection (13 patterns) and PII (6 types) — emits `ai_agent.governance.security_check` with pass/fail tags
+- **EscalationHandler**: Structured escalation with reason tags — emits `ai_agent.governance.escalation` driving monitors
+- **ApprovalGate**: Human-in-the-loop with latency tracking — emits `ai_agent.governance.approval_decision`
+
+**Why This Matters for Observability:**
+```
+Agent calls budget.increment_step()
+    → Emits ai_agent.governance.budget_utilisation metric
+    → Feeds "Budget Utilisation High" monitor (threshold: 80%)
+    → Triggers SLO: "99% requests within budgets"
+```
+
+A single governance API call creates the audit trail, logs, metrics, and monitor triggers — no manual instrumentation needed. Detection rules are **derived from governance behaviour**, not bolted on afterwards.
+
+**Onboarding a New Agent:**
+```python
+from shared.governance import BudgetTracker, SecurityValidator, EscalationHandler
+
+# Factory creates components with consistent service/agent_type tags
+budget = BudgetTracker.from_config("my-agent", "triage", max_steps=8)
+security = SecurityValidator("my-agent", "triage", block_on_pii=False)
+handler = EscalationHandler("my-agent", "triage")
+
+# All metrics automatically tagged: service:my-agent, team:ai-agents, agent_type:triage
+```
+
+### Innovation 2: Dynamic Personalised Observability Agent
+
+The **Dashboard Enhancement Agent** automatically creates domain-specific observability for new agents through a 4-phase workflow:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Phase 1: DISCOVERY                                                          │
+│  • Static code analysis (AST parsing for @workflow, @llm, @tool decorators) │
+│  • Telemetry discovery (existing Datadog metrics and traces)                 │
+│  • LLMObs span analysis (workflow operations)                                │
+│  Output: Categorised operations (workflow > llm > tool > general)            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Phase 2: PROPOSER (Gemini LLM)                                              │
+│  • Analyses discovered operations                                            │
+│  • Proposes domain-specific metrics (NOT generic infra metrics)              │
+│  • Example: sas_generator.code.generation.success vs service.request.count  │
+│  Output: 3-6 proposed metrics with queries and rationale                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Phase 3: PROVISIONER                                                        │
+│  • Creates span-based metrics in Datadog via MCP                             │
+│  • Generates query templates (sum, avg, p95, grouped variants)               │
+│  • Supports rollback if needed                                               │
+│  Output: Provisioned metrics ready for dashboarding                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Phase 4: DESIGNER (Gemini LLM)                                              │
+│  • Selects 4-6 most valuable widgets from provisioned metrics                │
+│  • Creates domain-specific titles and descriptions                           │
+│  • Validates queries match provisioned metrics exactly                       │
+│  Output: Widget group added to fleet dashboard                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Why This Matters:**
+- New agents get personalised dashboards in minutes, not days
+- Metrics are domain-specific (business logic) not generic (infrastructure)
+- Two-phase flow: preview before provisioning, with rollback capability
+- Self-service: agents can onboard themselves without platform team involvement
+
+### Challenges Faced
 
 | Challenge | Solution |
 |-----------|----------|
-| **Cloud Run + Datadog Agent** | Used Gen2 sidecar pattern with `gcr.io/datadoghq/serverless-init` |
-| **LLM Obs + Custom Metrics** | Combined auto-instrumentation with manual DogStatsD emission |
-| **Service-to-service auth** | GCP identity tokens for internal Cloud Run communication |
-| **Bounded autonomy tracking** | Governance metrics as first-class observability signals |
-| **Multi-agent consistency** | Shared observability module with standardised metrics/tags |
-| **SLO tag indexing** | Use `service:` tag (indexed) instead of custom `team:` tag for SLO queries |
+| **Cloud Run + Datadog Agent** | Gen2 sidecar pattern with `gcr.io/datadoghq/serverless-init` for APM, logs, and DogStatsD in serverless |
+| **LLM Obs + Custom Metrics** | Combined `ddtrace-run` auto-instrumentation with manual DogStatsD emission via shared observability module |
+| **Governance as Observability** | Made governance metrics first-class signals — budget checks emit metrics that feed monitors and SLOs |
+| **Multi-Agent Consistency** | Unified tag taxonomy (`service:`, `team:ai-agents`, `agent_type:`) via `build_tags()` helper |
+| **SLO Tag Indexing** | Discovered `team:` tag wasn't indexed; switched to `service:` tag for SLO metric queries |
+| **Domain vs Generic Metrics** | LLM prompts explicitly forbid generic metrics; provide anti-patterns and good examples |
+| **LLM Query Hallucination** | Widget designer validates queries against provisioned metrics; falls back to exact match by metric ID |
+| **Service-to-Service Auth** | GCP identity tokens for internal Cloud Run communication to MCP servers |
 
 ## License
 
